@@ -7,6 +7,7 @@
 #include "core/model.hpp"
 #include "hess/davidson.hpp"
 #include "hess/vibrations.hpp"
+#include "linalg/constants.hpp"
 #include "linalg/view.hpp"
 
 namespace saddle::hess {
@@ -29,8 +30,8 @@ struct ScreenResult {
 namespace detail {
 // Residual tolerance (mass-weighted eigenvalue units) for a frequency tolerance.
 inline double eigenvalue_tolerance(double tolerance_cm) {
-  constexpr double kHartreeToWavenumber = 219474.6313632;
-  constexpr double kAmuToElectronMass = 1822.888486209;
+  using constants::kAmuToElectronMass;
+  using constants::kHartreeToWavenumber;
   // Calibrate at 10 cm^-1 so modes below 100 cm^-1 meet the spec §14 10 cm^-1 target.
   constexpr double kReferenceFrequency = 10.0;
   return 2.0 * kReferenceFrequency * tolerance_cm * kAmuToElectronMass /
@@ -53,14 +54,10 @@ template <ElectronicModel Model>
   }
   if (!(options.step > 0.0)) throw std::invalid_argument("partial screen: step must be positive");
 
-  const Eigen::MatrixXd ext = external_basis(reference.coords, masses_amu);
-  Eigen::HouseholderQR<Eigen::MatrixXd> qr(ext);
-  const Eigen::MatrixXd q = qr.householderQ() * Eigen::MatrixXd::Identity(n3, n3);
-  const Eigen::MatrixXd internal = q.rightCols(n3 - ext.cols());
-
-  Eigen::VectorXd sqrt_m(n3);
-  for (Eigen::Index i = 0; i < masses_amu.size(); ++i) sqrt_m.segment<3>(3 * i).setConstant(std::sqrt(masses_amu[i]));
-  const Eigen::VectorXd inv_sqrt_m = sqrt_m.cwiseInverse();
+  const Eigen::MatrixXd internal =
+      orthogonal_complement(external_basis(reference.coords, masses_amu));
+  const Eigen::VectorXd inv_sqrt_m = inverse_sqrt_masses(masses_amu);
+  const Eigen::VectorXd sqrt_m = inv_sqrt_m.cwiseInverse();
 
   int gradients = 0;
   auto grad_at = [&](const Eigen::VectorXd& displacement) {

@@ -38,6 +38,14 @@ struct VibrationalAnalysis {
 [[nodiscard]] Eigen::MatrixXd external_basis(const Eigen::VectorXd& coords,
                                              const Eigen::VectorXd& masses_amu);
 
+// 1/sqrt(m) for every Cartesian coordinate (each atom's mass repeated three
+// times); multiplies a Cartesian vector into mass-weighted coordinates.
+[[nodiscard]] Eigen::VectorXd inverse_sqrt_masses(const Eigen::VectorXd& masses_amu);
+
+// Orthonormal basis of the subspace orthogonal to the (orthonormal) columns
+// of `basis`. With the external basis, this is the internal (vibrational) space.
+[[nodiscard]] Eigen::MatrixXd orthogonal_complement(const Eigen::MatrixXd& basis);
+
 // Signed frequency in cm^-1 of a mass-weighted eigenvalue (Eh / (bohr^2 amu)).
 [[nodiscard]] double eigenvalue_to_wavenumber(double eigenvalue);
 

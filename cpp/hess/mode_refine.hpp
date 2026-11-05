@@ -11,6 +11,17 @@ namespace saddle::hess {
 
 enum class Stencil { Central, FivePoint };
 
+namespace detail {
+// Gradient at reference + t * v.
+template <ElectronicModel Model>
+Eigen::VectorXd gradient_along(Model& model, const Geometry& reference, const Eigen::VectorXd& v,
+                               double t) {
+  Geometry g = reference;
+  g.coords += t * v;
+  return model.evaluate(g, WarmStart{}).gradient;
+}
+}  // namespace detail
+
 struct DirectionalResult {
   Eigen::VectorXd hessian_vector;  // H v for unit v
   double curvature;                // v^T H v
@@ -32,12 +43,7 @@ template <ElectronicModel Model>
   if (!(norm > 0.0)) throw std::invalid_argument("direction must be nonzero");
   if (!(step > 0.0)) throw std::invalid_argument("step must be positive");
   const Eigen::VectorXd v = direction / norm;
-
-  auto grad_at = [&](double t) {
-    Geometry g = reference;
-    g.coords += t * v;
-    return model.evaluate(g, WarmStart{}).gradient;
-  };
+  auto grad_at = [&](double t) { return detail::gradient_along(model, reference, v, t); };
 
   Eigen::VectorXd hv;
   int n = 0;
@@ -72,11 +78,7 @@ template <ElectronicModel Model>
     const double norm = modes.col(k).norm();
     if (!(norm > 0.0)) throw std::invalid_argument("mode columns must be nonzero");
     const Eigen::VectorXd v = modes.col(k) / norm;
-    auto grad_at = [&](double t) {
-      Geometry g = reference;
-      g.coords += t * v;
-      return model.evaluate(g, WarmStart{}).gradient;
-    };
+    auto grad_at = [&](double t) { return detail::gradient_along(model, reference, v, t); };
     // Four gradients per mode; the central estimate reuses the +-h points.
     const Eigen::VectorXd gp1 = grad_at(step), gm1 = grad_at(-step);
     const Eigen::VectorXd gp2 = grad_at(2.0 * step), gm2 = grad_at(-2.0 * step);

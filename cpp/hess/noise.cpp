@@ -3,12 +3,11 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "linalg/constants.hpp"
+
 namespace saddle::hess {
 
 namespace {
-
-constexpr double kHartreeToWavenumber = 219474.6313632;
-constexpr double kAmuToElectronMass = 1822.888486209;
 
 double binomial(int n, int k) {
   double out = 1.0;
@@ -60,8 +59,8 @@ double fd_error(double epsilon, double step, double fourth_derivative) {
 
 double noise_frequency_cm(double force_constant_error, double mass_amu) {
   if (!(mass_amu > 0.0)) throw std::invalid_argument("mass must be positive");
-  return std::sqrt(std::abs(force_constant_error) / (mass_amu * kAmuToElectronMass)) *
-         kHartreeToWavenumber;
+  return std::sqrt(std::abs(force_constant_error) / (mass_amu * constants::kAmuToElectronMass)) *
+         constants::kHartreeToWavenumber;
 }
 
 }  // namespace saddle::hess

@@ -8,6 +8,7 @@
 
 #include "core/model.hpp"
 #include "linalg/view.hpp"
+#include "hess/vibrations.hpp"
 #include "search/optimizer.hpp"
 
 namespace saddle::search {
@@ -87,10 +88,10 @@ template <ElectronicModel Model>
                             const Eigen::VectorXd& masses_amu, const IrcOptions& o) {
   const Eigen::Index n = ts.dimension();
   if (hessian.rows() != n || hessian.cols() != n) throw ShapeError("IRC: Hessian does not match geometry");
-  Eigen::VectorXd inv_sqrt_m = Eigen::VectorXd::Ones(n);
+  Eigen::VectorXd inv_sqrt_m = Eigen::VectorXd::Ones(n);  // unit masses for model surfaces
   if (masses_amu.size() != 0) {
     if (3 * masses_amu.size() != n) throw ShapeError("IRC: masses do not match geometry");
-    for (Eigen::Index i = 0; i < masses_amu.size(); ++i) inv_sqrt_m.segment<3>(3 * i).setConstant(1.0 / std::sqrt(masses_amu[i]));
+    inv_sqrt_m = hess::inverse_sqrt_masses(masses_amu);
   }
   const Eigen::MatrixXd basis = internal_basis(ts);
   const Eigen::MatrixXd hmw = inv_sqrt_m.asDiagonal() * hessian * inv_sqrt_m.asDiagonal();

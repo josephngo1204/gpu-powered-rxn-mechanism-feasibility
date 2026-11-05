@@ -120,3 +120,17 @@ TEST(PrfoStep, RespectsTrustAndClimbsAlongChosenMode) {
   EXPECT_GT(step.step[0], 0.0);  // uphill along mode 0 despite positive curvature
   EXPECT_LT(step.step[1], 0.0);  // downhill along mode 1
 }
+
+TEST(ModeTracking, PicksTheMostParallelModeIgnoringSign) {
+  Eigen::MatrixXd modes = Eigen::MatrixXd::Identity(3, 3);
+  const Eigen::Vector3d tracked(0.1, -0.9, 0.2);  // mostly along -y
+  const auto choice = detail::best_overlap_mode(tracked, modes);
+  EXPECT_EQ(choice.index, 1);
+  EXPECT_NEAR(choice.overlap, 0.9 / tracked.norm(), 1e-12);
+}
+
+TEST(ModeTracking, WithNothingTrackedFollowsTheLowestMode) {
+  const auto choice = detail::best_overlap_mode(Eigen::VectorXd(), Eigen::MatrixXd::Identity(3, 3));
+  EXPECT_EQ(choice.index, 0);
+  EXPECT_EQ(choice.overlap, 1.0);
+}

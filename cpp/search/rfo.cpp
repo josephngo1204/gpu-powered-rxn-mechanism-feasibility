@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 #include "hess/vibrations.hpp"
 
@@ -42,6 +43,32 @@ double rfo_max_component(double b, double f, double alpha) {
   return v[0] / (v[1] * sa);
 }
 
+// Shrink a step into the trust radius. `step_at(alpha)` must give a step whose
+// length falls as the RFO scaling alpha >= 1 grows. Returns alpha = 1 when the
+// unscaled step already fits; otherwise bisects for the smallest alpha that
+// fits, and clips the final step in case bisection stops just outside.
+template <class StepAt>
+std::pair<double, Eigen::VectorXd> restrict_to_trust(const StepAt& step_at, double trust) {
+  Eigen::VectorXd step = step_at(1.0);
+  if (step.norm() <= trust) return {1.0, step};
+  double lo = 1.0;
+  double hi = 2.0;
+  while (step_at(hi).norm() > trust && hi < 1e12) hi *= 4.0;
+  for (int i = 0; i < kBisectionIterations; ++i) {
+    const double mid = 0.5 * (lo + hi);
+    (step_at(mid).norm() > trust ? lo : hi) = mid;
+  }
+  step = step_at(hi);
+  if (step.norm() > trust) step *= trust / step.norm();
+  return {hi, step};
+}
+
+// Quadratic-model energy change g.s + 1/2 s.H.s.
+double predicted_change(const Eigen::VectorXd& gradient, const Eigen::MatrixXd& hessian,
+                        const Eigen::VectorXd& step) {
+  return gradient.dot(step) + 0.5 * step.dot(hessian * step);
+}
+
 }  // namespace
 
 double rms(const Eigen::VectorXd& v) {
@@ -61,10 +88,8 @@ Eigen::MatrixXd internal_basis(const Geometry& geometry) {
   const Eigen::Index n = geometry.dimension();
   const auto n_atoms = static_cast<Eigen::Index>(geometry.atomic_numbers.size());
   if (n_atoms < 2 || 3 * n_atoms != n) return Eigen::MatrixXd::Identity(n, n);
-  const Eigen::MatrixXd ext = hess::external_basis(geometry.coords, Eigen::VectorXd::Ones(n_atoms));
-  Eigen::HouseholderQR<Eigen::MatrixXd> qr(ext);
-  const Eigen::MatrixXd q = qr.householderQ() * Eigen::MatrixXd::Identity(n, n);
-  return q.rightCols(n - ext.cols());
+  return hess::orthogonal_complement(
+      hess::external_basis(geometry.coords, Eigen::VectorXd::Ones(n_atoms)));
 }
 
 Eigen::VectorXd internal_gradient(const Geometry& geometry, const Eigen::VectorXd& gradient) {
@@ -80,23 +105,8 @@ RfoStep rs_rfo_minimize_step(const Eigen::MatrixXd& hessian, const Eigen::Vector
   const Eigen::VectorXd f = v.transpose() * gradient;
 
   auto step_at = [&](double alpha) { return Eigen::VectorXd(v * rfo_min_component(b, f, alpha)); };
-
-  double alpha = 1.0;
-  Eigen::VectorXd s = step_at(alpha);
-  if (s.norm() > trust) {
-    double lo = 1.0;
-    double hi = 2.0;
-    while (step_at(hi).norm() > trust && hi < 1e12) hi *= 4.0;
-    for (int i = 0; i < kBisectionIterations; ++i) {
-      const double mid = 0.5 * (lo + hi);
-      (step_at(mid).norm() > trust ? lo : hi) = mid;
-    }
-    alpha = hi;
-    s = step_at(alpha);
-    if (s.norm() > trust) s *= trust / s.norm();  // guarantee the bound
-  }
-  const double predicted = gradient.dot(s) + 0.5 * s.dot(hessian * s);
-  return RfoStep{s, predicted, alpha};
+  auto [alpha, s] = restrict_to_trust(step_at, trust);
+  return RfoStep{s, predicted_change(gradient, hessian, s), alpha};
 }
 
 Eigen::MatrixXd bofill_update(const Eigen::MatrixXd& h, const Eigen::VectorXd& s, const Eigen::VectorXd& y) {
@@ -124,6 +134,7 @@ PrfoStep rs_prfo_step(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& gra
   if (mode < 0 || mode >= n) throw std::invalid_argument("P-RFO mode index out of range");
   const Eigen::VectorXd f = v.transpose() * gradient;
 
+  // Split the eigenbasis: maximize along `mode`, minimize along all others.
   Eigen::VectorXd b_min(n - 1), f_min(n - 1);
   for (Eigen::Index i = 0, j = 0; i < n; ++i) {
     if (i == mode) continue;
@@ -132,27 +143,15 @@ PrfoStep rs_prfo_step(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& gra
     ++j;
   }
   auto step_at = [&](double alpha) {
-    const Eigen::VectorXd smin = rfo_min_component(b_min, f_min, alpha);
-    Eigen::VectorXd sq(n);
-    for (Eigen::Index i = 0, j = 0; i < n; ++i) sq[i] = (i == mode) ? rfo_max_component(b[mode], f[mode], alpha) : smin[j++];
-    return Eigen::VectorXd(v * sq);
-  };
-
-  double alpha = 1.0;
-  Eigen::VectorXd s = step_at(alpha);
-  if (s.norm() > trust) {
-    double lo = 1.0, hi = 2.0;
-    while (step_at(hi).norm() > trust && hi < 1e12) hi *= 4.0;
-    for (int i = 0; i < kBisectionIterations; ++i) {
-      const double mid = 0.5 * (lo + hi);
-      (step_at(mid).norm() > trust ? lo : hi) = mid;
+    const Eigen::VectorXd s_min = rfo_min_component(b_min, f_min, alpha);
+    Eigen::VectorXd s_eigen(n);
+    for (Eigen::Index i = 0, j = 0; i < n; ++i) {
+      s_eigen[i] = (i == mode) ? rfo_max_component(b[mode], f[mode], alpha) : s_min[j++];
     }
-    alpha = hi;
-    s = step_at(alpha);
-    if (s.norm() > trust) s *= trust / s.norm();
-  }
-  const double predicted = gradient.dot(s) + 0.5 * s.dot(hessian * s);
-  return PrfoStep{s, predicted, alpha, b, v};
+    return Eigen::VectorXd(v * s_eigen);
+  };
+  auto [alpha, s] = restrict_to_trust(step_at, trust);
+  return PrfoStep{s, predicted_change(gradient, hessian, s), alpha, b, v};
 }
 
 }  // namespace saddle::search

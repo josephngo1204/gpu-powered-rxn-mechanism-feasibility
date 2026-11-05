@@ -1,4 +1,7 @@
-// Python bindings. Model surfaces only for now; cuEST models arrive in Phase F.
+// Python bindings for the C++ core. Fake surfaces are exposed as classes;
+// search, IRC, noise and Hessian routines accept any Python object with
+// evaluate(coords) -> (energy, gradient) through CallbackModel, which is how
+// the Python cuEST models reach this code.
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>

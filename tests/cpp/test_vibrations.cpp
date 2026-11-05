@@ -125,3 +125,21 @@ TEST(Vibrations, RejectsShapeMismatch) {
                                         Eigen::Vector2d(1.0, -1.0)),
                std::invalid_argument);
 }
+
+TEST(MassWeighting, InverseSqrtMassesRepeatsEachAtomThreeTimes) {
+  const Eigen::VectorXd m = (Eigen::VectorXd(2) << 4.0, 16.0).finished();
+  const Eigen::VectorXd w = saddle::hess::inverse_sqrt_masses(m);
+  ASSERT_EQ(w.size(), 6);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_DOUBLE_EQ(w[i], 0.5);
+    EXPECT_DOUBLE_EQ(w[3 + i], 0.25);
+  }
+}
+
+TEST(MassWeighting, OrthogonalComplementIsOrthonormalAndOrthogonal) {
+  const Eigen::MatrixXd basis = Eigen::MatrixXd::Identity(5, 2);
+  const Eigen::MatrixXd c = saddle::hess::orthogonal_complement(basis);
+  ASSERT_EQ(c.cols(), 3);
+  EXPECT_LT((c.transpose() * c - Eigen::MatrixXd::Identity(3, 3)).norm(), 1e-12);
+  EXPECT_LT((basis.transpose() * c).norm(), 1e-12);
+}

@@ -4,14 +4,13 @@
 #include <stdexcept>
 #include <string>
 
+#include "linalg/constants.hpp"
 #include "linalg/view.hpp"
 
 namespace saddle::hess {
 
 namespace {
 
-constexpr double kHartreeToWavenumber = 219474.6313632;
-constexpr double kAmuToElectronMass = 1822.888486209;
 constexpr double kRankTolerance = 1e-8;
 
 void validate(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& coords,
@@ -31,8 +30,24 @@ void validate(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& coords,
 }  // namespace
 
 double eigenvalue_to_wavenumber(double eigenvalue) {
-  const double omega = std::sqrt(std::abs(eigenvalue) / kAmuToElectronMass) * kHartreeToWavenumber;
+  const double omega = std::sqrt(std::abs(eigenvalue) / constants::kAmuToElectronMass) *
+                       constants::kHartreeToWavenumber;
   return eigenvalue < 0.0 ? -omega : omega;
+}
+
+Eigen::VectorXd inverse_sqrt_masses(const Eigen::VectorXd& masses_amu) {
+  Eigen::VectorXd out(3 * masses_amu.size());
+  for (Eigen::Index i = 0; i < masses_amu.size(); ++i) {
+    out.segment<3>(3 * i).setConstant(1.0 / std::sqrt(masses_amu[i]));
+  }
+  return out;
+}
+
+Eigen::MatrixXd orthogonal_complement(const Eigen::MatrixXd& basis) {
+  const Eigen::Index n = basis.rows();
+  const Eigen::HouseholderQR<Eigen::MatrixXd> qr(basis);
+  const Eigen::MatrixXd q = qr.householderQ() * Eigen::MatrixXd::Identity(n, n);
+  return q.rightCols(n - basis.cols());
 }
 
 Eigen::MatrixXd external_basis(const Eigen::VectorXd& coords, const Eigen::VectorXd& masses) {
@@ -68,8 +83,7 @@ VibrationalAnalysis analyze_vibrations(const Eigen::MatrixXd& hessian, const Eig
   const Eigen::Index n3 = coords.size();
   const Eigen::Index n_atoms = masses.size();
 
-  Eigen::VectorXd inv_sqrt_m(n3);
-  for (Eigen::Index i = 0; i < n_atoms; ++i) inv_sqrt_m.segment<3>(3 * i).setConstant(1.0 / std::sqrt(masses[i]));
+  const Eigen::VectorXd inv_sqrt_m = inverse_sqrt_masses(masses);
   const Eigen::MatrixXd hmw = inv_sqrt_m.asDiagonal() * hessian * inv_sqrt_m.asDiagonal();
 
   // Translation sum rule on the Cartesian Hessian.
@@ -93,10 +107,7 @@ VibrationalAnalysis analyze_vibrations(const Eigen::MatrixXd& hessian, const Eig
     }
   }
 
-  // Orthonormal complement of the external space.
-  Eigen::HouseholderQR<Eigen::MatrixXd> qr(ext);
-  const Eigen::MatrixXd q = qr.householderQ() * Eigen::MatrixXd::Identity(n3, n3);
-  const Eigen::MatrixXd internal = q.rightCols(n3 - n_ext);
+  const Eigen::MatrixXd internal = orthogonal_complement(ext);
 
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(internal.transpose() * hmw * internal);
   const Eigen::Index n_vib = n3 - n_ext;
