@@ -1,0 +1,218 @@
+{
+  "campaign": "campaigns/c1/c1_sn2.yaml",
+  "environment": {
+    "compute_capability": "9.0",
+    "cuda_version": "driver 570.211.01",
+    "cuest_version": "0.2.2",
+    "git_commit": "6429ab7443f3d6f334ecb14f3a5d185531403475",
+    "git_dirty": "false",
+    "gpu_model": "NVIDIA H200 NVL",
+    "saddle_version": "0.0.1"
+  },
+  "hypothesis": "c1-cl-ch3cl-gas",
+  "limit_kcal_mol": 22.521998015208247,
+  "model": {
+    "auxiliary_basis": "def2-universal-jkfit",
+    "basis": "def2-SVPD",
+    "cuest_version": "0.2.2",
+    "functional": "WB97X-V",
+    "grid": "(75,302)",
+    "math_mode": "native-fp64",
+    "nonlocal_grid": "(50,194)",
+    "orbital_gradient": 1e-10,
+    "solvent": "gas",
+    "thresholdPQ": 1e-14,
+    "type": "cuest",
+    "variant": {}
+  },
+  "pathways": {
+    "sn2": {
+      "barrier_by_step": {
+        "0.000531": 7.391381653444553,
+        "0.00106": 7.39138538871298
+      },
+      "barrier_kcal_mol": 7.391381653444553,
+      "campaign": "/home/jcngo2/rxn_mechanism_feasibility_gpu/campaigns/c1/c1_sn2.yaml",
+      "electronic_barrier_kcal_mol": 2.4653546113329408,
+      "endpoint_minima_kcal_mol": {
+        "product": -11.674431884652213,
+        "reactant": -11.674431848340372
+      },
+      "fd_step_bohr": 0.0005313292845913055,
+      "frequencies_cm": [
+        -463.3137782365112,
+        203.98110578681045,
+        204.03548983386693,
+        220.90140633783005,
+        937.64021693047,
+        938.1206925430807,
+        1065.7897166600355,
+        1376.6186572847741,
+        1376.7390537542547,
+        3203.78564848594,
+        3423.6085876314787,
+        3423.7243408062054
+      ],
+      "gates": [
+        {
+          "failure_action": null,
+          "gate": "G1",
+          "name": "stationarity",
+          "passed": true,
+          "reason": "rms 5.78e-11, max 1.45e-10 Eh/bohr (limits 1e-05, 1.5e-05); translation/rotation part removed (max 1.6e-12)"
+        },
+        {
+          "failure_action": null,
+          "gate": "G2",
+          "name": "electronic quality",
+          "passed": true,
+          "reason": "converged and stable"
+        },
+        {
+          "failure_action": null,
+          "gate": "G3",
+          "name": "Hessian quality",
+          "passed": true,
+          "reason": "all quality targets met"
+        },
+        {
+          "failure_action": null,
+          "gate": "G4",
+          "name": "saddle order",
+          "passed": true,
+          "reason": "one imaginary mode -463.3 cm^-1"
+        },
+        {
+          "failure_action": null,
+          "gate": "G5",
+          "name": "mode character",
+          "passed": true,
+          "reason": "reactive bonds carry 100% of the mode"
+        },
+        {
+          "failure_action": null,
+          "gate": "G6",
+          "name": "connectivity",
+          "passed": true,
+          "reason": "IRC connects reactants and intended products"
+        },
+        {
+          "failure_action": null,
+          "gate": "G7",
+          "name": "competition",
+          "passed": true,
+          "reason": "all declared competitors evaluated"
+        },
+        {
+          "failure_action": null,
+          "gate": "G8",
+          "name": "robustness",
+          "passed": true,
+          "reason": "verdict stable"
+        }
+      ],
+      "hypothesis": "c1-cl-ch3cl-gas",
+      "imaginary_frequency_cm": -463.3137782365112,
+      "irc": {
+        "forward": {
+          "endpoint_converged": true,
+          "endpoint_energy_eh": -959.944946775014,
+          "matches_product": false,
+          "matches_reactant": true,
+          "points": 2,
+          "stop_reason": "energy_rise"
+        },
+        "reverse": {
+          "endpoint_converged": true,
+          "endpoint_energy_eh": -959.9449467751678,
+          "matches_product": true,
+          "matches_reactant": false,
+          "points": 2,
+          "stop_reason": "energy_rise"
+        }
+      },
+      "limit_kcal_mol": 22.521998015208247,
+      "n_gradients": 619,
+      "noise_epsilon_eh_bohr": 5.156315240918511e-13,
+      "noise_floor_cm": 2.720667443920437,
+      "notes": [
+        "noise 5.2e-13 below probe resolution; using 1e-10",
+        "G2: internal RHF->RHF stability, lowest A+B eigenvalue 0.2106 Eh; RHF->UHF not tested"
+      ],
+      "pathway": "sn2",
+      "reason": "7.39 + 2\u03c3 below limit 22.52",
+      "robustness": {
+        "functional": {
+          "barrier_kcal_mol": 6.059610586904388,
+          "reason": "6.06 + 2\u03c3 below limit 22.52",
+          "verdict": "SUPPORTED"
+        },
+        "grid": {
+          "barrier_kcal_mol": 7.385416351791458,
+          "reason": "7.39 + 2\u03c3 below limit 22.52",
+          "verdict": "SUPPORTED"
+        },
+        "precision": {
+          "barrier_kcal_mol": 7.3913816338975105,
+          "reason": "7.39 + 2\u03c3 below limit 22.52",
+          "verdict": "SUPPORTED"
+        },
+        "rotation": {
+          "barrier_kcal_mol": 7.385145428511289,
+          "reason": "7.39 + 2\u03c3 below limit 22.52",
+          "verdict": "SUPPORTED"
+        }
+      },
+      "sigma_kcal_mol": 1.8055494729916484,
+      "tunneling": {
+        "eckart": 1.2499712494305175,
+        "forward_barrier_kcal_mol": 13.599574719437312,
+        "reverse_barrier_kcal_mol": 13.599574700389647,
+        "wigner": 1.2082842647643912
+      },
+      "uncertainty": [
+        {
+          "component": "numerical",
+          "note": "barrier at h vs 2h",
+          "source": "measured",
+          "value": 3.7352684270075542e-06
+        },
+        {
+          "component": "grid",
+          "note": "max barrier shift under rotation/grid variants 0.006",
+          "source": "measured",
+          "value": 0.1
+        },
+        {
+          "component": "basis",
+          "note": "def2-SVPD search profile; def2-TZVPD single points pending",
+          "source": "estimate",
+          "value": 1.0
+        },
+        {
+          "component": "method",
+          "note": "DFT vs CCSD(T) for SN2 barriers; refine from C3 benchmarks",
+          "source": "estimate",
+          "value": 1.5
+        },
+        {
+          "component": "thermo",
+          "note": "qRRHO vs RRHO",
+          "source": "measured",
+          "value": 0.0029831873000958353
+        },
+        {
+          "component": "solvent",
+          "note": "gas phase",
+          "source": "estimate",
+          "value": 0.0
+        }
+      ],
+      "verdict": "SUPPORTED"
+    }
+  },
+  "rankings": [],
+  "reactant_energy_eh": -959.9263424807032,
+  "target_half_life_s": 3600.0,
+  "temperature_K": 298.15
+}

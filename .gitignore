@@ -10,7 +10,8 @@ __pycache__/
 .hypothesis/
 
 # Results are ignored unless a release baseline (spec §10)
-results/
+results/*
+!results/mvp/
 runs/
 
 # Local Claude settings
