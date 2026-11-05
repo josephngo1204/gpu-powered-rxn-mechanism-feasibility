@@ -3,7 +3,7 @@ import pytest
 
 cupy = pytest.importorskip("cupy")
 
-from saddle.cuest import (  # noqa: E402
+from saddle.cuest import (
     AOShell,
     CuestError,
     Handle,
@@ -14,7 +14,7 @@ from saddle.cuest import (  # noqa: E402
     device_pointer,
     run_with_workspace,
 )
-from saddle.cuest.bindings import cb  # noqa: E402
+from saddle.cuest.bindings import cb
 
 pytestmark = pytest.mark.gpu
 

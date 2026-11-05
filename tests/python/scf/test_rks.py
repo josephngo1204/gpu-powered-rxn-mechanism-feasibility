@@ -86,3 +86,30 @@ def test_hf_is_not_an_xc_functional() -> None:
     with pytest.raises(ValueError, match="HF"):
         functional_key("HF")
     assert functional_key("wB97X-V") == "WB97X-V"
+
+
+@pytest.mark.slow
+def test_wb97x_v_gap_to_pyscf_is_the_long_range_df_convention() -> None:
+    """The ~4e-5 Eh gap is -1/2 f_LRC times the long-range DF exchange difference.
+
+    See tests/cross_code/test_range_separated_df.py and docs/adr/0003; VV10 is
+    not the cause (wB97X without VV10 shows the same gap).
+    """
+    r = ours("WB97X-V")
+    assert r.converged  # type: ignore[attr-defined]
+    mol = gto.M(
+        atom=[(s, tuple(x)) for s, x in zip(SYMBOLS, XYZ, strict=True)],
+        unit="Bohr",
+        basis="def2-svp",
+        verbose=0,
+    )
+    mf = dft.RKS(mol).density_fit(auxbasis="def2-universal-jkfit")
+    mf.xc = "wb97x-v"
+    for g in (mf.grids, mf.nlcgrids):
+        g.atom_grid = (150, 974)
+        g.prune = None
+    mf.conv_tol = 1e-11
+    gap = r.energy - float(mf.kernel())  # type: ignore[attr-defined]
+    # -1/2 * 0.833 * 9.5e-5 = -4.0e-5 predicted before SCF relaxation.
+    assert -5e-5 < gap < -2.5e-5
+    assert r.nonlocal_energy > 0  # type: ignore[attr-defined]

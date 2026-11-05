@@ -8,13 +8,13 @@ import scipy.linalg
 cupy = pytest.importorskip("cupy")
 pyscf = pytest.importorskip("pyscf")
 
-from pyscf import gto  # noqa: E402
+from pyscf import gto
 
-from saddle import elements, units  # noqa: E402
-from saddle.basis import load_basis  # noqa: E402
-from saddle.cuest import Handle, MathMode  # noqa: E402
-from saddle.cuest.basis import AOBasis, PairList  # noqa: E402
-from saddle.cuest.oei import OEIntPlan  # noqa: E402
+from saddle import elements, units
+from saddle.basis import load_basis
+from saddle.cuest import Handle, MathMode
+from saddle.cuest.basis import AOBasis, PairList
+from saddle.cuest.oei import OEIntPlan
 
 pytestmark = pytest.mark.gpu
 
