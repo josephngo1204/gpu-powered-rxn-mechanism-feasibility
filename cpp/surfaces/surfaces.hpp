@@ -2,6 +2,7 @@
 
 #include <Eigen/Dense>
 #include <cstdint>
+#include <vector>
 
 #include "core/model.hpp"
 #include "linalg/view.hpp"
@@ -38,6 +39,26 @@ class Harmonic {
  private:
   Eigen::VectorXd x0_;
   Eigen::MatrixXd k_;
+};
+
+// Pairwise harmonic springs E = sum 1/2 k (r_ij - r0)^2 on a Cartesian
+// geometry. Translation and rotation invariant, so it exercises projection.
+// A negative k makes that stretch a saddle direction.
+struct Spring {
+  int i;
+  int j;
+  double k;
+  double r0;
+};
+
+class Springs {
+ public:
+  explicit Springs(std::vector<Spring> springs);
+  [[nodiscard]] Evaluation evaluate(const Geometry& geometry, const WarmStart& guess) const;
+
+ private:
+  std::vector<Spring> springs_;
+  int n_atoms_ = 0;
 };
 
 namespace detail {

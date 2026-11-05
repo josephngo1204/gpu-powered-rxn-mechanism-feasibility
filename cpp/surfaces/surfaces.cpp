@@ -1,5 +1,6 @@
 #include "surfaces/surfaces.hpp"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -92,6 +93,34 @@ Evaluation Harmonic::evaluate(const Geometry& geometry, const WarmStart& /*guess
   const Eigen::VectorXd dx = geometry.coords - x0_;
   const Eigen::VectorXd g = k_ * dx;
   return Evaluation{Hartree{0.5 * dx.dot(g)}, g, {}};
+}
+
+Springs::Springs(std::vector<Spring> springs) : springs_(std::move(springs)) {
+  for (const auto& s : springs_) {
+    if (s.i < 0 || s.j < 0 || s.i == s.j || !(s.r0 > 0.0)) {
+      throw std::invalid_argument("Springs: invalid spring definition");
+    }
+    n_atoms_ = std::max({n_atoms_, s.i + 1, s.j + 1});
+  }
+}
+
+Evaluation Springs::evaluate(const Geometry& geometry, const WarmStart& /*guess*/) const {
+  if (geometry.dimension() < 3 * n_atoms_ || geometry.dimension() % 3 != 0) {
+    throw ShapeError("Springs: geometry has too few Cartesian coordinates");
+  }
+  double energy = 0.0;
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(geometry.dimension());
+  for (const auto& s : springs_) {
+    const Eigen::Vector3d d = geometry.coords.segment<3>(3 * s.j) - geometry.coords.segment<3>(3 * s.i);
+    const double r = d.norm();
+    if (r == 0.0) throw std::domain_error("Springs: atoms coincide");
+    const double stretch = r - s.r0;
+    energy += 0.5 * s.k * stretch * stretch;
+    const Eigen::Vector3d f = s.k * stretch * d / r;
+    gradient.segment<3>(3 * s.j) += f;
+    gradient.segment<3>(3 * s.i) -= f;
+  }
+  return Evaluation{Hartree{energy}, gradient, {}};
 }
 
 namespace detail {
