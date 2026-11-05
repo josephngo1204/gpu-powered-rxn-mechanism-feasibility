@@ -143,9 +143,9 @@ def collect_environment() -> dict[str, str]:
         (s.strip() for s in gpu.splitlines()[0].split(",")) if gpu else (UNKNOWN,) * 3
     )
     try:
-        import cuest  # type: ignore[import-not-found]
+        from saddle.cuest.bindings import CUEST_VERSION
 
-        cuest_version = str(getattr(cuest, "__version__", UNKNOWN))
+        cuest_version = CUEST_VERSION
     except ImportError:
         cuest_version = "not_installed"
     return {

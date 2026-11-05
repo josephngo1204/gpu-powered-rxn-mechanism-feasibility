@@ -50,7 +50,7 @@ packages = ["saddle"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["scipy", "scipy.*", "h5py", "h5py.*"]
+module = ["scipy", "scipy.*", "h5py", "h5py.*", "cupy", "cupy.*", "cuest", "cuest.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
