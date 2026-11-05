@@ -20,8 +20,10 @@ from saddle.cuest.core import Handle
 from saddle.cuest.df import DFIntPlan
 from saddle.cuest.grid import MolecularGrid
 from saddle.cuest.oei import OEIntPlan
+from saddle.cuest.pcm import PCMIntPlan
 from saddle.cuest.xc import XCIntPlan
 from saddle.grids import GridSpec
+from saddle.solvation import PCMModel
 
 # Canonical orthogonalization drops overlap eigenvalues below this (rank guard, spec §6).
 OVERLAP_CUTOFF = 1e-8
@@ -48,6 +50,8 @@ class SCFResult:
     nonlocal_energy: float = 0.0
     functional: str | None = None
     grid: str | None = None
+    solvation_energy: float = 0.0
+    solvent: str | None = None
 
 
 def nuclear_repulsion(coords_bohr: npt.ArrayLike, charges: Sequence[float]) -> float:
@@ -101,6 +105,7 @@ def rks(
     *,
     functional: str | None = None,
     grid: GridSpec | None = None,
+    solvent: PCMModel | None = None,
     charge: int = 0,
     threshold_pq: float = 1e-14,
     orbital_gradient_tol: float = 1e-8,
@@ -156,6 +161,12 @@ def rks(
             lrc_omega=fractions[2],
         )
         resources.append(df)
+        pcm = None
+        if solvent is not None:
+            pcm = PCMIntPlan(handle, oei, symbols, solvent)
+            resources.append(pcm)
+        q_pcm = None
+        e_pcm = 0.0
         needs_k = fractions[0] != 0.0 or fractions[1] != 0.0
 
         s = oei.overlap()
@@ -192,8 +203,16 @@ def rks(
                 e_xc, vxc = xc.rks_potential(c_rows)
                 e_nl, vnl = xc.rks_nonlocal_potential(c_rows)
                 fock = fock + vxc + vnl
+            if pcm is not None:
+                pcm_result = pcm.potential(d, q_pcm)  # raises PCMNotConverged
+                q_pcm = pcm_result.charges
+                e_pcm = pcm_result.energy
+                fock = fock + pcm_result.potential
             e_elec = (
-                float(cupy.vdot(d, h) + 0.5 * cupy.vdot(d, j) - 0.5 * cupy.vdot(d, k)) + e_xc + e_nl
+                float(cupy.vdot(d, h) + 0.5 * cupy.vdot(d, j) - 0.5 * cupy.vdot(d, k))
+                + e_xc
+                + e_nl
+                + e_pcm
             )
             err_o = x.T @ (fock @ d @ s - s @ d @ fock) @ x
             grad = float(cupy.abs(err_o).max())
@@ -220,6 +239,8 @@ def rks(
             nonlocal_energy=e_nl,
             functional=functional,
             grid=None if grid is None else str(grid),
+            solvation_energy=e_pcm,
+            solvent=None if solvent is None else f"{solvent.method} eps={solvent.epsilon}",
         )
     finally:
         for r in reversed(resources):
