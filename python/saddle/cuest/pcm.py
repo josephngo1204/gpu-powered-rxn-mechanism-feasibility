@@ -24,18 +24,10 @@ from saddle.cuest.core import (
     run_with_workspace,
 )
 from saddle.cuest.oei import OEIntPlan
+from saddle.errors import PCMNotConverged as PCMNotConverged  # re-export
 from saddle.solvation import ZETA, PCMModel
 
 P = cb.CuestParametersType
-
-
-class PCMNotConverged(RuntimeError):
-    def __init__(self, residual: float, iterations: int) -> None:
-        super().__init__(
-            f"PCM charges did not converge (residual {residual:.2e}, {iterations} iterations)"
-        )
-        self.residual = residual
-        self.iterations = iterations
 
 
 @dataclass

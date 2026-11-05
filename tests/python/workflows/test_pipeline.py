@@ -87,3 +87,26 @@ def test_noisy_precision_variant_breaks_robustness(tmp_path: Path) -> None:
     g8 = next(g for g in s["gates"] if g["gate"] == "G8")
     assert not g8["passed"] and "precision" in g8["reason"]
     assert r.verdicts["to_c"] is Verdict.INCONCLUSIVE
+
+
+def test_pcm_failure_during_search_is_reported_as_g2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec §11/§12: a PCM convergence failure is a G2 rejection, not a silent drop."""
+    from saddle.errors import PCMNotConverged
+    from saddle.workflows import pipeline
+
+    real = pipeline._refined
+
+    def fail_saddle_search(search: object, *args: object, **kwargs: object) -> object:
+        if search is pipeline._core.saddle_search:
+            raise PCMNotConverged(2e-2, 1)
+        return real(search, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(pipeline, "_refined", fail_saddle_search)
+    r = run_campaign(CAMPAIGN, tmp_path / "run")
+    s = r.summary["pathways"]["to_c"]
+    g2 = next(g for g in s["gates"] if g["gate"] == "G2")
+    assert not g2["passed"] and "PCM not converged" in g2["reason"]
+    assert any("PCM charges did not converge" in n for n in s["notes"])
+    assert r.verdicts["to_c"] is not Verdict.SUPPORTED

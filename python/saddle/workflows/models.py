@@ -13,6 +13,7 @@ import numpy as np
 import numpy.typing as npt
 
 from saddle import _core
+from saddle.errors import PCMNotConverged
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -215,9 +216,19 @@ class CuestProvider(ModelProvider):
         return d
 
     def g2_evidence(self, model: Model, coords: FloatArray) -> dict[str, Any]:
-        r = model.run(coords, gradient=False, stability=True)  # type: ignore[attr-defined]
-        history = model.history  # type: ignore[attr-defined]
         uses_pcm = self.level.solvent is not None
+        try:
+            r = model.run(coords, gradient=False, stability=True)  # type: ignore[attr-defined]
+        except PCMNotConverged as exc:
+            # Spec §12: check every PCM convergence flag; G2 rejects, never a silent pass.
+            return {
+                "scf_converged": False,
+                "orbitals_stable": False,
+                "uses_pcm": True,
+                "pcm_converged": False,
+                "note": f"PCM not converged at the TS: {exc}",
+            }
+        history = model.history  # type: ignore[attr-defined]
         return {
             "scf_converged": all(h.converged for h in history),
             "orbitals_stable": r.orbitals_stable,

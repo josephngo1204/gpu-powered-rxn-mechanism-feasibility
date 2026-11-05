@@ -22,15 +22,12 @@ from saddle.cuest.grid import MolecularGrid
 from saddle.cuest.oei import OEIntPlan
 from saddle.cuest.pcm import PCMIntPlan
 from saddle.cuest.xc import XCIntPlan
+from saddle.errors import SCFError as SCFError  # re-export
 from saddle.grids import GridSpec
 from saddle.solvation import PCMModel
 
 # Canonical orthogonalization drops overlap eigenvalues below this (rank guard, spec §6).
 OVERLAP_CUTOFF = 1e-8
-
-
-class SCFError(RuntimeError):
-    pass
 
 
 @dataclass

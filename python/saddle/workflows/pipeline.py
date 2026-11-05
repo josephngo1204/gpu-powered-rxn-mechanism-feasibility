@@ -28,11 +28,11 @@ from saddle.analysis import thermo, tunneling
 from saddle.analysis.hessian_quality import assess_hessians
 from saddle.analysis.kinetics import barrier_limit_kcal_mol
 from saddle.analysis.uncertainty import COMPONENTS, Term, UncertaintyBudget
+from saddle.errors import PCMNotConverged, SCFError
 from saddle.gates import gates as G
 from saddle.gates.verdict import PathwayOutcome, Verdict, decide, rank_pair
 from saddle.graphs import Graph, bond_graph, compare_graphs, expected_products
 from saddle.hypothesis import Hypothesis, Pathway, load
-from saddle.scf.rhf import SCFError
 from saddle.store.geometry import geometry_hash
 from saddle.store.provenance import NOT_APPLICABLE, Provenance, collect_environment
 from saddle.store.results import write_result
@@ -515,11 +515,16 @@ def analyze_pathway(
     except (SCFError, ModelError, RuntimeError, ValueError) as exc:
         # The search budget was spent without a valid saddle (spec §5).
         notes.append(f"saddle search failed: {exc}")
+        failed = G.Evidence(
+            declared_competitors=tuple(n for n in c.hypothesis.compare if n != p.name)
+        )
+        if isinstance(exc, PCMNotConverged):
+            failed = failed.replace(
+                scf_converged=False, orbitals_stable=False, uses_pcm=True, pcm_converged=False
+            )
         return PathwayAnalysis(
             pathway=p,
-            evidence=G.Evidence(
-                declared_competitors=tuple(n for n in c.hypothesis.compare if n != p.name)
-            ),
+            evidence=failed,
             ts=None,
             barrier_kcal_mol=None,
             barrier_by_step={},
