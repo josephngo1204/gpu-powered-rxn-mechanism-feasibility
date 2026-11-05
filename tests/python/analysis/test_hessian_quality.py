@@ -109,3 +109,21 @@ def test_single_step_marks_stability_as_not_evaluated() -> None:
 def test_rejects_empty_input() -> None:
     with pytest.raises(ValueError):
         assess_hessians({}, COORDS, MASSES)
+
+
+def test_near_zero_imaginary_modes_are_not_compared() -> None:
+    # Linear A-H-C saddle: bends sit at about -0.5 and -1.0 cm^-1 for the two steps.
+    coords = np.array([0.0, 0.0, 0.0, 2.5, 0.0, 0.0, 5.0, 0.0, 0.0])
+    masses = np.array([12.0, 1.00782503223, 12.0])
+    model = _core.Springs([(0, 1, -0.06, 2.5), (1, 2, -0.06, 2.5), (0, 2, 0.4, 5.0)])
+
+    def raw(step: float) -> FloatArray:
+        pts = _core.central_stencil(coords, step)
+        r, _, _ = _core.assemble_central([model.evaluate(c)[1] for _, _, c in pts], step)
+        return np.asarray(r)
+
+    raws = {1e-3: raw(1e-3), 2e-3: raw(2e-3)}
+    assert assess_hessians(raws, coords, masses, noise_floor_cm=5.0).passed
+    assert assess_hessians(raws, coords, masses).passed
+    strict = assess_hessians(raws, coords, masses, noise_floor_cm=0.1)
+    assert not _check(strict, "imaginary_stability").passed

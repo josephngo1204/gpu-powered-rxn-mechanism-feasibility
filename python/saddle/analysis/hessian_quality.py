@@ -27,7 +27,9 @@ class HessianTargets:
     max_frequency_change_cm: float = 1.0
     max_imaginary_change_fraction: float = 0.02
     max_delta_g_change_kcal_mol: float = 0.1
-    imaginary_threshold_cm: float = 0.0
+    # Imaginary modes smaller than this are numerical zeros, not compared.
+    # PROPOSED fallback (spec gives none); pass the measured noise floor instead.
+    imaginary_threshold_cm: float = 10.0
 
 
 @dataclass(frozen=True)
@@ -83,11 +85,17 @@ def assess_hessians(
     *,
     delta_g_by_precision: Mapping[str, float] | None = None,
     targets: HessianTargets | None = None,
+    noise_floor_cm: float | None = None,
 ) -> QualityReport:
-    """Assess unsymmetrized FD Hessians computed at one or more accepted steps."""
+    """Assess unsymmetrized FD Hessians computed at one or more accepted steps.
+
+    `noise_floor_cm` (from the noise probe) sets which imaginary modes are
+    real enough to compare; without it the targets' fallback is used.
+    """
     if not raw_by_step:
         raise ValueError("assess_hessians needs at least one Hessian")
     t = targets or HessianTargets()
+    imag_floor = t.imaginary_threshold_cm if noise_floor_cm is None else noise_floor_cm
     coords = np.asarray(coords_bohr, dtype=np.float64)
     masses = np.asarray(masses_amu, dtype=np.float64)
 
@@ -131,7 +139,7 @@ def assess_hessians(
         stable = (f1 > STABLE_MODE_FLOOR_CM) & (f2 > STABLE_MODE_FLOOR_CM)
         if np.any(stable):
             freq_change = max(freq_change, float(np.max(np.abs(f1[stable] - f2[stable]))))
-        imag = (f1 < -t.imaginary_threshold_cm) & (f2 < -t.imaginary_threshold_cm)
+        imag = (f1 < -imag_floor) & (f2 < -imag_floor)
         if np.any(imag):
             rel = np.abs(f1[imag] - f2[imag]) / np.abs(f1[imag])
             imag_change = max(imag_change, float(np.max(rel)))
