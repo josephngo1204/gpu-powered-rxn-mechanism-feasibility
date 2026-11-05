@@ -1,0 +1,17 @@
+schema_version: 1
+id: fake-h-transfer
+temperature_K: 298.15
+target_half_life_s: 3600
+solvent: null
+charge: 0
+multiplicity: 2
+reactants:
+  - {name: complex, xyz: species/complex.xyz, atom_map: [1, 2, 3, 4]}
+pathways:
+  - name: to_c
+    breaking: [[1, 2]]
+    forming: [[2, 3]]
+  - name: to_d
+    breaking: [[1, 2]]
+    forming: [[2, 4]]
+compare: [to_c, to_d]

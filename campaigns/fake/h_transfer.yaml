@@ -1,0 +1,28 @@
+# Fake-surface campaign: H transfer from donor A to acceptor C (5.9 bohr away)
+# or D (6.4 bohr away). Exercises the full pipeline without a GPU.
+schema_version: 1
+hypothesis: h_transfer_hypothesis.yaml
+model:
+  type: fake:pair_model
+  # Atom indices are 0-based in reactant xyz order: A=0, H=1, C=2, D=3.
+  springs: [[0, 2, 1.0, 5.9], [0, 3, 1.0, 6.4], [2, 3, 1.0, 8.705171]]
+  morse: [[0, 1, 0.15, 1.0, 1.8], [1, 2, 0.15, 1.0, 1.8], [1, 3, 0.15, 1.0, 1.8]]
+pathways:
+  to_c: {ts_guess: species/ts_to_c.xyz}
+  to_d: {ts_guess: species/ts_to_d.xyz}
+symmetry_numbers: {reactant: 1, ts: 1}
+quasi_harmonic: true
+uncertainty:
+  # Fake surface: the "method" is exact by construction, so these are stated
+  # explicitly rather than left out. Numerical and thermo terms are measured.
+  grid: {value: 0.0, source: estimate, note: "fake surface has no grid"}
+  basis: {value: 0.0, source: estimate, note: "fake surface has no basis"}
+  method: {value: 0.5, source: estimate, note: "placeholder for functional spread"}
+  solvent: {value: 0.0, source: estimate, note: "gas phase"}
+robustness:
+  # Variants stand in for grid, precision and functional checks.
+  grid: {model_scale: {morse_depth: 1.002}}
+  # 1e-9 Eh/bohr: at 1e-8 the H-atom noise floor (~12 cm^-1) already exceeds
+  # the spec section 6 TR-residual target of 5 cm^-1 and G3 fails in the variant.
+  precision: {gradient_noise: 1.0e-9}
+  functional: {model_scale: {morse_depth: 0.99}}
