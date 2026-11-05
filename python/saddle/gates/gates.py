@@ -277,5 +277,10 @@ ALL_GATES: tuple[Callable[[Evidence], GateResult], ...] = (
 )
 
 
+# G1-G7. G8 (robustness) compares verdicts, so it runs only after every
+# variant has its own preliminary verdict from these seven.
+GATES_BEFORE_ROBUSTNESS = ALL_GATES[:-1]
+
+
 def evaluate_all(e: Evidence) -> list[GateResult]:
     return [gate(e) for gate in ALL_GATES]

@@ -8,6 +8,11 @@ Separated reactants are minimized and treated species by species, so a
 bimolecular barrier is measured from separated reactants with the per-species
 standard-state term (spec §4). Fake surfaces describe only the whole system,
 so they support single-species reactants; cuEST models evaluate fragments.
+
+Reading order: ``run_campaign`` (top level) -> ``_run_variant`` (one model)
+-> ``analyze_pathway`` (one TS), whose stages are the ``_stage`` helpers in
+pipeline order. Model evaluations happen in a fixed order because cuEST SCF
+warm-starts from the previous geometry.
 """
 
 import dataclasses
@@ -21,32 +26,39 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-import yaml
 
-from saddle import _core, elements, units
+from saddle import _core, units
 from saddle.analysis import thermo, tunneling
-from saddle.analysis.hessian_quality import assess_hessians
+from saddle.analysis.hessian_quality import QualityReport, assess_hessians
 from saddle.analysis.kinetics import barrier_limit_kcal_mol
 from saddle.analysis.uncertainty import COMPONENTS, Term, UncertaintyBudget
 from saddle.errors import PCMNotConverged, SCFError
 from saddle.gates import gates as G
-from saddle.gates.verdict import PathwayOutcome, Verdict, decide, rank_pair
+from saddle.gates.verdict import PathwayOutcome, Verdict, VerdictResult, decide, rank_pair
 from saddle.graphs import Graph, bond_graph, compare_graphs, expected_products
-from saddle.hypothesis import Hypothesis, Pathway, load
+from saddle.hypothesis import Pathway
 from saddle.store.geometry import geometry_hash
 from saddle.store.provenance import NOT_APPLICABLE, Provenance, collect_environment
 from saddle.store.results import write_result
 from saddle.store.stencil import StencilStore, run_central_hessian
-from saddle.workflows.models import Model, ModelError, ModelProvider, SystemInfo, build_provider
+from saddle.workflows.campaign import (
+    CAMPAIGN_SCHEMA_VERSION,
+    Atoms,
+    Campaign,
+    CampaignError,
+    load_campaign,
+)
+from saddle.workflows.models import Model, ModelError, ModelProvider, build_provider
 
 FloatArray = npt.NDArray[np.float64]
 
-CAMPAIGN_SCHEMA_VERSION = 1
 # Spec §6 design estimate of |E''''| used to choose the FD step.
 FOURTH_DERIVATIVE_ESTIMATE = 2.0
 # Below this the probe cannot resolve noise (clean analytic surfaces).
 NOISE_RESOLUTION_FLOOR = 1e-10
 MIN_STEP, MAX_STEP = 1e-4, 2e-2
+# FD step for reactant-species Hessians (bohr); their noise is not probed.
+SPECIES_STEP = 1e-3
 # Reference-level refinement before a Hessian (spec §6 "Residual force"). At
 # the G1 limit (|g| ~ 1e-5) the residual force alone gives ~14 cm^-1 of
 # rotation-vibration mixing for hydrogen, above the 5 cm^-1 target.
@@ -60,143 +72,12 @@ REFERENCE_GTOL_MAX = 1.5e-7
 # warm-started line. PROPOSED value; see docs/adr/0002.
 HESSIAN_ORBITAL_GRADIENT = 1e-10
 IRC_STEP = 0.05
+IRC_MAX_POINTS = 300
 IRC_SWITCH_GRADIENT = 1e-3
+ROTATION_SEED = 20261105
 
 
-class CampaignError(ValueError):
-    pass
-
-
-@dataclass(frozen=True)
-class Campaign:
-    path: Path
-    hypothesis: Hypothesis
-    model_spec: Mapping[str, Any]
-    ts_guesses: Mapping[str, FloatArray]
-    symmetry_reactant: int
-    symmetry_ts: int
-    symmetry_by_name: Mapping[str, int]
-    quasi_harmonic: bool
-    uncertainty: Mapping[str, Term]
-    robustness: Mapping[str, Mapping[str, Any]]
-
-    @property
-    def symbols(self) -> tuple[str, ...]:
-        return tuple(s for sp in self.hypothesis.reactants for s in sp.symbols)
-
-    @property
-    def atom_map(self) -> tuple[int, ...]:
-        return tuple(i for sp in self.hypothesis.reactants for i in sp.atom_map)
-
-    @property
-    def masses(self) -> FloatArray:
-        return np.array([elements.isotope_mass(s) for s in self.symbols])
-
-    @property
-    def atomic_numbers(self) -> list[int]:
-        return [elements.atomic_number(s) for s in self.symbols]
-
-    @property
-    def reactant_coords(self) -> FloatArray:
-        return np.concatenate([sp.coords_bohr.ravel() for sp in self.hypothesis.reactants])
-
-    @property
-    def symmetry_species(self) -> tuple[int, ...]:
-        return tuple(
-            self.symmetry_by_name.get(sp.name, self.symmetry_reactant)
-            for sp in self.hypothesis.reactants
-        )
-
-    def species_slice(self, index: int) -> slice:
-        start = sum(len(sp.symbols) for sp in self.hypothesis.reactants[:index])
-        return slice(start, start + len(self.hypothesis.reactants[index].symbols))
-
-    def system_info(self) -> SystemInfo:
-        return SystemInfo(
-            symbols=self.symbols,
-            species_symbols=tuple(tuple(sp.symbols) for sp in self.hypothesis.reactants),
-            species_charges=tuple(sp.charge for sp in self.hypothesis.reactants),
-            charge=self.hypothesis.charge,
-            solvent=self.hypothesis.solvent,
-        )
-
-
-@dataclass(frozen=True)
-class Atoms:
-    """A subset of the system (the whole system or one reactant species)."""
-
-    symbols: tuple[str, ...]
-    atom_map: tuple[int, ...]
-    multiplicity: int
-
-    @property
-    def masses(self) -> FloatArray:
-        return np.array([elements.isotope_mass(s) for s in self.symbols])
-
-    @property
-    def atomic_numbers(self) -> list[int]:
-        return [elements.atomic_number(s) for s in self.symbols]
-
-
-def _species_atoms(c: "Campaign", index: int) -> Atoms:
-    sp = c.hypothesis.reactants[index]
-    electrons = sum(elements.atomic_number(x) for x in sp.symbols) - sp.charge
-    return Atoms(tuple(sp.symbols), tuple(sp.atom_map), 1 if electrons % 2 == 0 else 2)
-
-
-def _system_atoms(c: "Campaign") -> Atoms:
-    return Atoms(c.symbols, c.atom_map, c.hypothesis.multiplicity)
-
-
-def _read_guess(path: Path, n_atoms: int) -> FloatArray:
-    lines = path.read_text().splitlines()
-    n = int(lines[0].split()[0])
-    if n != n_atoms:
-        raise CampaignError(f"{path}: TS guess has {n} atoms, hypothesis has {n_atoms}")
-    xyz = [[float(v) for v in ln.split()[1:4]] for ln in lines[2 : 2 + n]]
-    return np.asarray(xyz).ravel() / units.BOHR_TO_ANGSTROM
-
-
-def load_campaign(path: str | Path) -> Campaign:
-    path = Path(path)
-    raw = yaml.safe_load(path.read_text())
-    if raw.get("schema_version") != CAMPAIGN_SCHEMA_VERSION:
-        raise CampaignError(f"campaign schema_version must be {CAMPAIGN_SCHEMA_VERSION}")
-    base = path.parent
-    hyp = load(base / raw["hypothesis"])
-    if len(hyp.reactants) != 1 and str(raw["model"].get("type", "")).startswith("fake:"):
-        raise CampaignError(
-            "fake-surface campaigns support one reactant species; bimolecular reactants need "
-            "a model that evaluates separated fragments (type: cuest)"
-        )
-    names = {p.name for p in hyp.pathways}
-    guesses_raw = raw.get("pathways", {})
-    if set(guesses_raw) != names:
-        raise CampaignError(
-            f"campaign pathways {sorted(guesses_raw)} != hypothesis {sorted(names)}"
-        )
-    guesses = {n: _read_guess(base / g["ts_guess"], hyp.n_atoms) for n, g in guesses_raw.items()}
-    terms: dict[str, Term] = {}
-    for name, t in (raw.get("uncertainty") or {}).items():
-        if name in ("numerical", "thermo"):
-            raise CampaignError(f"uncertainty '{name}' is measured by the pipeline; do not set it")
-        value = t.get("value")
-        terms[name] = Term(
-            name, None if value is None else float(value), t["source"], t.get("note", "")
-        )
-    sym = raw.get("symmetry_numbers", {})
-    return Campaign(
-        path=path,
-        hypothesis=hyp,
-        model_spec=raw["model"],
-        ts_guesses=guesses,
-        symmetry_reactant=int(sym.get("reactant", 1)),
-        symmetry_ts=int(sym.get("ts", 1)),
-        symmetry_by_name={str(k): int(v) for k, v in sym.items() if k not in ("reactant", "ts")},
-        quasi_harmonic=bool(raw.get("quasi_harmonic", True)),
-        uncertainty=terms,
-        robustness=raw.get("robustness") or {},
-    )
+# --------------------------------------------------------------------------- results
 
 
 @dataclass
@@ -208,6 +89,47 @@ class StationaryPoint:
     thermo_qh: thermo.ThermoResult | None
     thermo_rrho: thermo.ThermoResult | None
     note: str = ""
+
+    def g_total(self, quasi: bool) -> float | None:
+        """Electronic energy plus the (q)RRHO free-energy correction, in Eh."""
+        t = self.thermo_qh if quasi else self.thermo_rrho
+        return None if t is None else self.energy + t.g_correction
+
+
+@dataclass
+class ReactantSet:
+    """Separated reactant species; energies, free energies and ZPEs add up."""
+
+    species: list[StationaryPoint]
+
+    @property
+    def energy(self) -> float:
+        return float(sum(p.energy for p in self.species))
+
+    @property
+    def coords(self) -> FloatArray:
+        """Concatenated per-species coordinates; species live in separate frames."""
+        return np.concatenate([p.coords.ravel() for p in self.species])
+
+    def graph(self, c: Campaign) -> Graph:
+        """Union of each species' own bond graph (frames are independent)."""
+        bonds: Graph = set()
+        for i, point in enumerate(self.species):
+            atoms = c.species(i)
+            bonds |= bond_graph(atoms.symbols, point.coords, atoms.atom_map)
+        return bonds
+
+    def g_total(self, quasi: bool) -> float | None:
+        parts = [p.g_total(quasi) for p in self.species]
+        return (
+            None if any(v is None for v in parts) else float(sum(v for v in parts if v is not None))
+        )
+
+    @property
+    def zpe(self) -> float | None:
+        if any(p.thermo_qh is None for p in self.species):
+            return None
+        return float(sum(p.thermo_qh.zpe for p in self.species if p.thermo_qh is not None))
 
 
 @dataclass
@@ -243,6 +165,28 @@ class PathwayAnalysis:
         return UncertaintyBudget(tuple(terms[c] for c in COMPONENTS if c in terms))
 
 
+@dataclass(frozen=True)
+class VariantOutcome:
+    """A pathway's preliminary verdict under one robustness variant."""
+
+    verdict: str
+    barrier_kcal_mol: float | None
+    reason: str
+
+
+@dataclass
+class CampaignResult:
+    campaign: Campaign
+    limit_kcal_mol: float
+    analyses: dict[str, PathwayAnalysis]
+    verdicts: dict[str, Any]
+    summary: dict[str, Any]
+    out_dir: Path
+
+
+# --------------------------------------------------------------------------- helpers
+
+
 def _model_fingerprint(spec: Mapping[str, Any], variant: str) -> str:
     text = json.dumps({"model": spec, "variant": variant}, sort_keys=True, default=str)
     return hashlib.sha256(text.encode()).hexdigest()[:16]
@@ -255,16 +199,22 @@ def _provenance(
     env: Mapping[str, str],
     described: Mapping[str, Any] | None = None,
 ) -> Provenance:
+    """Provenance record; cuEST models carry their level of theory and GPU."""
     model = f"{c.model_spec['type']}:{_model_fingerprint(c.model_spec, variant)}"
+    common: dict[str, Any] = {
+        "geometry_hash": geometry_hash(coords, c.atomic_numbers, model),
+        "atom_order": c.symbols,
+        "atom_map": c.atom_map,
+        "charge": c.hypothesis.charge,
+        "multiplicity": c.hypothesis.multiplicity,
+        "model": model,
+        "git_commit": env["git_commit"],
+        "saddle_version": env["saddle_version"],
+    }
     d = dict(described or {})
     if d.get("type") == "cuest":
         return Provenance(
-            geometry_hash=geometry_hash(coords, c.atomic_numbers, model),
-            atom_order=c.symbols,
-            atom_map=c.atom_map,
-            charge=c.hypothesis.charge,
-            multiplicity=c.hypothesis.multiplicity,
-            model=model,
+            **common,
             basis=str(d["basis"]),
             auxiliary_basis=str(d["auxiliary_basis"]),
             grid=str(d["grid"]),
@@ -281,17 +231,10 @@ def _provenance(
             cuda_version=env.get("cuda_runtime", env["cuda_version"]),
             gpu_model=env["gpu_model"],
             compute_capability=env["compute_capability"],
-            git_commit=env["git_commit"],
-            saddle_version=env["saddle_version"],
             extra={"git_dirty": env["git_dirty"], "variant": variant, "solvent": str(d["solvent"])},
         )
     return Provenance(
-        geometry_hash=geometry_hash(coords, c.atomic_numbers, model),
-        atom_order=c.symbols,
-        atom_map=c.atom_map,
-        charge=c.hypothesis.charge,
-        multiplicity=c.hypothesis.multiplicity,
-        model=model,
+        **common,
         basis=NOT_APPLICABLE,
         auxiliary_basis=NOT_APPLICABLE,
         grid=NOT_APPLICABLE,
@@ -302,13 +245,12 @@ def _provenance(
         cuda_version=NOT_APPLICABLE,
         gpu_model=NOT_APPLICABLE,
         compute_capability=NOT_APPLICABLE,
-        git_commit=env["git_commit"],
-        saddle_version=env["saddle_version"],
         extra={"git_dirty": env["git_dirty"], "variant": variant},
     )
 
 
 def _noise_floor_cm(epsilon: float, step: float, lightest_amu: float) -> float:
+    """Smallest frequency the FD Hessian resolves, from noise and truncation error."""
     dk = epsilon / step + FOURTH_DERIVATIVE_ESTIMATE * step * step / 6.0
     return math.sqrt(dk / (lightest_amu * units.AMU_TO_ELECTRON_MASS)) * units.HARTREE_TO_WAVENUMBER
 
@@ -342,7 +284,18 @@ def _thermo(
     )
 
 
+def _with_thermo(
+    point: StationaryPoint, c: Campaign, atoms: Atoms, freqs: FloatArray, symmetry: int
+) -> StationaryPoint:
+    """Attach qRRHO and RRHO thermochemistry (both kept: their gap is sigma_thermo)."""
+    point.thermo_qh = _thermo(c, atoms, point.coords, freqs, symmetry, True)
+    point.thermo_rrho = _thermo(c, atoms, point.coords, freqs, symmetry, False)
+    return point
+
+
 class _Counter:
+    """Counts model evaluations (reported as n_gradients)."""
+
     def __init__(self, inner: Model) -> None:
         self.inner = inner
         self.calls = 0
@@ -359,7 +312,9 @@ def _hessian(
     return np.asarray(run.raw)
 
 
-ROTATION_SEED = 20261105
+def _frequencies(raw_hessian: FloatArray, coords: FloatArray, masses: FloatArray) -> Any:
+    """Vibrational analysis of the symmetrized FD Hessian."""
+    return _core.analyze_vibrations(0.5 * (raw_hessian + raw_hessian.T), coords, masses)
 
 
 def _random_rotation(seed: int) -> FloatArray:
@@ -431,66 +386,252 @@ def _minimum(
     settings: str,
     symmetry: int,
 ) -> tuple[StationaryPoint, bool]:
-    """Minimize with reference-level refinement, then a Hessian and thermochemistry."""
+    """Minimize with reference-level refinement, then a Hessian and thermochemistry.
+
+    Returns the point and whether the minimization converged. A point with
+    non-positive modes carries a note and no thermochemistry.
+    """
     if len(atoms.symbols) == 1:
         energy, _ = model.evaluate(guess)
-        point = StationaryPoint(guess, float(energy), np.zeros((3, 3)), np.zeros(0), None, None)
-        point.thermo_qh = _thermo(c, atoms, guess, np.zeros(0), symmetry, True)
-        point.thermo_rrho = _thermo(c, atoms, guess, np.zeros(0), symmetry, False)
-        return point, True
+        atom = StationaryPoint(guess, float(energy), np.zeros((3, 3)), np.zeros(0), None, None)
+        return _with_thermo(atom, c, atoms, np.zeros(0), symmetry), True
     r = _refined(_core.minimize, model, guess, atoms.atomic_numbers)
     coords = np.asarray(r["coords"])
     raw = _hessian(model, atoms, coords, step, store, settings)
-    vib = _core.analyze_vibrations(0.5 * (raw + raw.T), coords, atoms.masses)
-    freqs = np.asarray(vib.frequencies_cm)
+    freqs = np.asarray(_frequencies(raw, coords, atoms.masses).frequencies_cm)
     point = StationaryPoint(coords, float(r["energy"]), raw, freqs, None, None)
     if np.any(freqs <= 0):
         point.note = f"minimum has non-positive modes {freqs[freqs <= 0].round(1).tolist()}"
         return point, bool(r["converged"])
-    point.thermo_qh = _thermo(c, atoms, coords, freqs, symmetry, True)
-    point.thermo_rrho = _thermo(c, atoms, coords, freqs, symmetry, False)
-    return point, bool(r["converged"])
+    return _with_thermo(point, c, atoms, freqs, symmetry), bool(r["converged"])
 
 
-@dataclass
-class ReactantSet:
-    """Separated reactant species; free energies and ZPEs add up."""
+# --------------------------------------------------------------------------- one pathway
 
-    species: list[StationaryPoint]
 
-    @property
-    def energy(self) -> float:
-        return float(sum(p.energy for p in self.species))
+def _competitors(c: Campaign, p: Pathway) -> tuple[str, ...]:
+    return tuple(n for n in c.hypothesis.compare if n != p.name)
 
-    @property
-    def coords(self) -> FloatArray:
-        """Concatenated per-species coordinates; species live in separate frames."""
-        return np.concatenate([p.coords.ravel() for p in self.species])
 
-    def graph(self, c: "Campaign") -> Graph:
-        """Union of each species' own bond graph (frames are independent)."""
-        bonds: Graph = set()
-        for i, point in enumerate(self.species):
-            atoms = _species_atoms(c, i)
-            bonds |= bond_graph(atoms.symbols, point.coords, atoms.atom_map)
-        return bonds
-
-    def g_total(self, quasi: bool) -> float | None:
-        parts = [_g_total(p, quasi) for p in self.species]
-        return (
-            None if any(v is None for v in parts) else float(sum(v for v in parts if v is not None))
+def _failed_search(c: Campaign, p: Pathway, exc: Exception, n_gradients: int) -> PathwayAnalysis:
+    """The search budget was spent without a valid saddle (spec §5)."""
+    evidence = G.Evidence(declared_competitors=_competitors(c, p))
+    if isinstance(exc, PCMNotConverged):
+        evidence = evidence.replace(
+            scf_converged=False, orbitals_stable=False, uses_pcm=True, pcm_converged=False
         )
+    return PathwayAnalysis(
+        pathway=p,
+        evidence=evidence,
+        ts=None,
+        barrier_kcal_mol=None,
+        barrier_by_step={},
+        numerical_sigma=None,
+        thermo_sigma=None,
+        noise_epsilon=float("nan"),
+        noise_floor_cm=float("nan"),
+        step=float("nan"),
+        tunneling={},
+        irc={},
+        notes=[f"saddle search failed: {exc}"],
+        n_gradients=n_gradients,
+        saddle_found=False,
+    )
 
-    @property
-    def zpe(self) -> float | None:
-        if any(p.thermo_qh is None for p in self.species):
-            return None
-        return float(sum(p.thermo_qh.zpe for p in self.species if p.thermo_qh is not None))
+
+def _search_notes(ts_run: Mapping[str, Any]) -> list[str]:
+    notes = []
+    if not ts_run.get("refined", True):
+        notes.append(
+            "TS refinement did not reach the reference threshold "
+            f"(RMS {REFERENCE_GTOL_RMS:g}); kept the better stage"
+        )
+    if not ts_run["converged"]:
+        notes.append(f"saddle search did not converge in {ts_run['iterations']} iterations")
+    return notes
 
 
-def _g_total(point: StationaryPoint, quasi: bool) -> float | None:
-    t = point.thermo_qh if quasi else point.thermo_rrho
-    return None if t is None else point.energy + t.g_correction
+@dataclass(frozen=True)
+class _FDStep:
+    """Measured gradient noise and the finite-difference step chosen from it."""
+
+    epsilon: float  # as probed (may be below resolution)
+    step: float
+    noise_floor_cm: float
+    note: str | None
+
+
+def _stage_fd_step(model: Model, x: FloatArray, mode: FloatArray, lightest_amu: float) -> _FDStep:
+    """Probe gradient noise along the followed mode, then pick the optimal FD step."""
+    eps, _ = _core.probe_noise(model, x, mode)
+    eps_used = max(eps, NOISE_RESOLUTION_FLOOR)
+    note = None
+    if eps < NOISE_RESOLUTION_FLOOR:
+        note = f"noise {eps:.1e} below probe resolution; using {NOISE_RESOLUTION_FLOOR:g}"
+    h = float(np.clip(_core.optimal_step(eps_used, FOURTH_DERIVATIVE_ESTIMATE), MIN_STEP, MAX_STEP))
+    return _FDStep(float(eps), h, _noise_floor_cm(eps_used, h, lightest_amu), note)
+
+
+def _stage_evidence(
+    c: Campaign,
+    p: Pathway,
+    x: FloatArray,
+    gradient: FloatArray,
+    g2: Mapping[str, Any],
+    quality: QualityReport,
+    vib: Any,
+    noise_floor_cm: float,
+    reactant_graph: Graph,
+) -> G.Evidence:
+    """Everything gates G1-G7 need about the TS, before the IRC is run."""
+    return G.Evidence(
+        gradient=np.asarray(_core.internal_gradient(x, c.atomic_numbers, np.asarray(gradient))),
+        raw_gradient=np.asarray(gradient),
+        scf_converged=g2["scf_converged"],
+        orbitals_stable=g2["orbitals_stable"],
+        uses_pcm=g2["uses_pcm"],
+        pcm_converged=g2["pcm_converged"],
+        hessian_quality=quality,
+        frequencies_cm=np.asarray(vib.frequencies_cm),
+        noise_floor_cm=noise_floor_cm,
+        ts_mode_cartesian=np.asarray(vib.modes_cartesian)[:, 0],
+        coords_bohr=x,
+        atom_map=c.atom_map,
+        breaking=p.breaking,
+        forming=p.forming,
+        reactant_graph=reactant_graph,
+        expected_product_graph=expected_products(reactant_graph, p),
+        alternative_product_graphs={
+            q.name: expected_products(reactant_graph, q)
+            for q in c.hypothesis.pathways
+            if q.name != p.name
+        },
+        declared_competitors=_competitors(c, p),
+    )
+
+
+def _stage_irc(
+    c: Campaign,
+    model: Model,
+    x: FloatArray,
+    hessian: FloatArray,
+    reactant_graph: Graph,
+    product_graph: Graph,
+) -> tuple[dict[str, Any], dict[str, FloatArray], dict[str, Graph]]:
+    """IRC in both directions; returns the per-branch report, endpoints and their graphs."""
+    path = _core.irc(
+        model, x, c.atomic_numbers, hessian, c.masses, IRC_STEP, IRC_MAX_POINTS, IRC_SWITCH_GRADIENT
+    )
+    report: dict[str, Any] = {}
+    endpoints: dict[str, FloatArray] = {}
+    graphs: dict[str, Graph] = {}
+    for branch in ("forward", "reverse"):
+        end = path[branch]["endpoint"]
+        endpoints[branch] = np.asarray(end["coords"])
+        graphs[branch] = bond_graph(c.symbols, endpoints[branch], c.atom_map)
+        report[branch] = {
+            "stop_reason": path[branch]["stop_reason"],
+            "points": len(path[branch]["path"]),
+            "endpoint_converged": bool(end["converged"]),
+            "endpoint_energy_eh": float(end["energy"]),
+            "matches_reactant": compare_graphs(graphs[branch], reactant_graph).matches,
+            "matches_product": compare_graphs(graphs[branch], product_graph).matches,
+        }
+    return report, endpoints, graphs
+
+
+def _known(value: float | None, what: str) -> float:
+    if value is None:
+        raise ValueError(f"{what} needs thermochemistry, which is missing")
+    return value
+
+
+@dataclass(frozen=True)
+class _Barrier:
+    value: float | None = None
+    by_step: dict[str, float] = field(default_factory=dict)
+    numerical_sigma: float | None = None
+    thermo_sigma: float | None = None
+
+
+def _stage_barrier(
+    c: Campaign,
+    ts: StationaryPoint,
+    raws: Mapping[float, FloatArray],
+    h: float,
+    real: FloatArray,
+    reactant: ReactantSet,
+) -> _Barrier:
+    """Free-energy barrier at h, plus its h-vs-2h and qRRHO-vs-RRHO spreads.
+
+    Attaches thermochemistry to ``ts``. Only called for a clean first-order
+    saddle with complete reactant thermochemistry.
+    """
+    system = c.system
+    _with_thermo(ts, c, system, real, c.symmetry_ts)
+    quasi = c.quasi_harmonic
+    g_r = _known(reactant.g_total(quasi), "reactant free energy")
+    g_r_other = _known(reactant.g_total(not quasi), "reactant free energy")
+    g_ts = _known(ts.g_total(quasi), "TS free energy")
+    g_ts_other = _known(ts.g_total(not quasi), "TS free energy")
+    barrier = units.hartree_to_kcal_mol(g_ts - g_r)
+    by_step = {f"{h:.3g}": barrier}
+    numerical_sigma = None
+    f2 = np.asarray(_frequencies(raws[2 * h], ts.coords, c.masses).frequencies_cm)
+    real2 = f2[f2 > 0]
+    if real2.size == real.size:
+        t2 = _thermo(c, system, ts.coords, real2, c.symmetry_ts, quasi)
+        b2 = units.hartree_to_kcal_mol(ts.energy + t2.g_correction - g_r)
+        by_step[f"{2 * h:.3g}"] = b2
+        numerical_sigma = abs(barrier - b2)
+    thermo_sigma = abs(barrier - units.hartree_to_kcal_mol(g_ts_other - g_r_other))
+    return _Barrier(barrier, by_step, numerical_sigma, thermo_sigma)
+
+
+def _stage_tunneling(
+    c: Campaign,
+    model: Model,
+    imaginary_cm: float,
+    ts: StationaryPoint,
+    irc: Mapping[str, Any],
+    endpoints: Mapping[str, FloatArray],
+    h: float,
+    store: StencilStore,
+    settings: str,
+    reactant: ReactantSet,
+) -> tuple[dict[str, Any], dict[str, float]]:
+    """Tunneling factors (reported separately) and the IRC endpoint minima.
+
+    Eckart barriers are ZPE-corrected and measured from the IRC endpoint
+    minima on each side (for bimolecular reactions these are the pre- and
+    post-reaction complexes).
+    """
+    tun: dict[str, Any] = {"wigner": tunneling.wigner(imaginary_cm, c.hypothesis.temperature_k)}
+    endpoint_minima: dict[str, float] = {}
+    side_branch = {
+        "reactant": next((b for b, i in irc.items() if i["matches_reactant"]), None),
+        "product": next((b for b, i in irc.items() if i["matches_product"]), None),
+    }
+    if None not in side_branch.values() and ts.thermo_qh is not None:
+        minima = {
+            side: _minimum(model, c, c.system, endpoints[branch], h, store, settings, 1)[0]
+            for side, branch in side_branch.items()
+            if branch is not None
+        }
+        for side, pt in minima.items():
+            endpoint_minima[side] = units.hartree_to_kcal_mol(pt.energy - reactant.energy)
+        zpe_r, zpe_p = (minima[s].thermo_qh for s in ("reactant", "product"))
+        if zpe_r is not None and zpe_p is not None:
+            e_ts = ts.energy + ts.thermo_qh.zpe
+            v_f = e_ts - (minima["reactant"].energy + zpe_r.zpe)
+            v_r = e_ts - (minima["product"].energy + zpe_p.zpe)
+            if v_f > 0 and v_r > 0:
+                tun["eckart"] = tunneling.eckart(imaginary_cm, v_f, v_r, c.hypothesis.temperature_k)
+                tun["forward_barrier_kcal_mol"] = units.hartree_to_kcal_mol(v_f)
+                tun["reverse_barrier_kcal_mol"] = units.hartree_to_kcal_mol(v_r)
+    if "eckart" not in tun:
+        tun["eckart_note"] = "Eckart not computed: IRC endpoints missing or not ZPE-corrected"
+    return tun, endpoint_minima
 
 
 def analyze_pathway(
@@ -502,65 +643,32 @@ def analyze_pathway(
     settings: str,
     start: FloatArray | None = None,
 ) -> PathwayAnalysis:
-    system = _system_atoms(c)
+    """Find, characterize and validate one pathway's TS against separated reactants."""
     model = provider.system()
     counter = _Counter(model)
     guess = c.ts_guesses[p.name] if start is None else start
-    follow = _bond_change_direction(c, guess, p)
-    notes: list[str] = []
     try:
         ts_run = _refined(
-            _core.saddle_search, counter, guess, c.atomic_numbers, follow_direction=follow
+            _core.saddle_search,
+            counter,
+            guess,
+            c.atomic_numbers,
+            follow_direction=_bond_change_direction(c, guess, p),
         )
     except (SCFError, ModelError, RuntimeError, ValueError) as exc:
-        # The search budget was spent without a valid saddle (spec §5).
-        notes.append(f"saddle search failed: {exc}")
-        failed = G.Evidence(
-            declared_competitors=tuple(n for n in c.hypothesis.compare if n != p.name)
-        )
-        if isinstance(exc, PCMNotConverged):
-            failed = failed.replace(
-                scf_converged=False, orbitals_stable=False, uses_pcm=True, pcm_converged=False
-            )
-        return PathwayAnalysis(
-            pathway=p,
-            evidence=failed,
-            ts=None,
-            barrier_kcal_mol=None,
-            barrier_by_step={},
-            numerical_sigma=None,
-            thermo_sigma=None,
-            noise_epsilon=float("nan"),
-            noise_floor_cm=float("nan"),
-            step=float("nan"),
-            tunneling={},
-            irc={},
-            notes=notes,
-            n_gradients=counter.calls,
-            saddle_found=False,
-        )
+        return _failed_search(c, p, exc, counter.calls)
     x = np.asarray(ts_run["coords"])
-    if not ts_run.get("refined", True):
-        notes.append(
-            "TS refinement did not reach the reference threshold "
-            f"(RMS {REFERENCE_GTOL_RMS:g}); kept the better stage"
-        )
-    if not ts_run["converged"]:
-        notes.append(f"saddle search did not converge in {ts_run['iterations']} iterations")
+    notes = _search_notes(ts_run)
 
-    # Noise probe along the followed mode, then the step.
-    eps, _ = _core.probe_noise(counter, x, np.asarray(ts_run["followed_mode"]))
-    eps_used = max(eps, NOISE_RESOLUTION_FLOOR)
-    if eps < NOISE_RESOLUTION_FLOOR:
-        notes.append(f"noise {eps:.1e} below probe resolution; using {NOISE_RESOLUTION_FLOOR:g}")
-    h = float(np.clip(_core.optimal_step(eps_used, FOURTH_DERIVATIVE_ESTIMATE), MIN_STEP, MAX_STEP))
-    floor_cm = _noise_floor_cm(eps_used, h, float(c.masses.min()))
-
+    fd = _stage_fd_step(counter, x, np.asarray(ts_run["followed_mode"]), float(c.masses.min()))
+    if fd.note:
+        notes.append(fd.note)
+    h = fd.step
     raws = {
-        h: _hessian(counter, system, x, h, store, settings),
-        2 * h: _hessian(counter, system, x, 2 * h, store, settings),
+        h: _hessian(counter, c.system, x, h, store, settings),
+        2 * h: _hessian(counter, c.system, x, 2 * h, store, settings),
     }
-    quality = assess_hessians(raws, x, c.masses, noise_floor_cm=floor_cm)
+    quality = assess_hessians(raws, x, c.masses, noise_floor_cm=fd.noise_floor_cm)
     hess = 0.5 * (raws[h] + raws[h].T)
     vib = _core.analyze_vibrations(hess, x, c.masses)
     freqs = np.asarray(vib.frequencies_cm)
@@ -568,148 +676,121 @@ def analyze_pathway(
     g2 = provider.g2_evidence(model, x)
     if g2.get("note"):
         notes.append(f"G2: {g2['note']}")
-
     reactant_graph = reactant.graph(c)
-    product_graph = expected_products(reactant_graph, p)
-    alternatives = {
-        q.name: expected_products(reactant_graph, q)
-        for q in c.hypothesis.pathways
-        if q.name != p.name
-    }
-
-    evidence = G.Evidence(
-        gradient=np.asarray(_core.internal_gradient(x, c.atomic_numbers, np.asarray(gradient))),
-        raw_gradient=np.asarray(gradient),
-        scf_converged=g2["scf_converged"],
-        orbitals_stable=g2["orbitals_stable"],
-        uses_pcm=g2["uses_pcm"],
-        pcm_converged=g2["pcm_converged"],
-        hessian_quality=quality,
-        frequencies_cm=freqs,
-        noise_floor_cm=floor_cm,
-        ts_mode_cartesian=np.asarray(vib.modes_cartesian)[:, 0],
-        coords_bohr=x,
-        atom_map=c.atom_map,
-        breaking=p.breaking,
-        forming=p.forming,
-        reactant_graph=reactant_graph,
-        expected_product_graph=product_graph,
-        alternative_product_graphs=alternatives,
-        declared_competitors=tuple(n for n in c.hypothesis.compare if n != p.name),
+    evidence = _stage_evidence(
+        c, p, x, gradient, g2, quality, vib, fd.noise_floor_cm, reactant_graph
     )
 
-    # IRC and endpoints.
-    irc_info: dict[str, Any] = {}
-    ends: dict[str, Graph] = {}
-    end_points: dict[str, FloatArray] = {}
+    irc: dict[str, Any] = {}
+    endpoints: dict[str, FloatArray] = {}
     if G.g4_saddle_order(evidence).passed:
-        path = _core.irc(
-            counter, x, c.atomic_numbers, hess, c.masses, IRC_STEP, 300, IRC_SWITCH_GRADIENT
-        )
-        for branch in ("forward", "reverse"):
-            end = path[branch]["endpoint"]
-            coords_end = np.asarray(end["coords"])
-            ends[branch] = bond_graph(c.symbols, coords_end, c.atom_map)
-            end_points[branch] = coords_end
-            irc_info[branch] = {
-                "stop_reason": path[branch]["stop_reason"],
-                "points": len(path[branch]["path"]),
-                "endpoint_converged": bool(end["converged"]),
-                "endpoint_energy_eh": float(end["energy"]),
-                "matches_reactant": compare_graphs(ends[branch], reactant_graph).matches,
-                "matches_product": compare_graphs(ends[branch], product_graph).matches,
-            }
+        product_graph = expected_products(reactant_graph, p)
+        irc, endpoints, graphs = _stage_irc(c, counter, x, hess, reactant_graph, product_graph)
         evidence = evidence.replace(
-            irc_forward_graph=ends["forward"], irc_reverse_graph=ends["reverse"]
+            irc_forward_graph=graphs["forward"], irc_reverse_graph=graphs["reverse"]
         )
     else:
         notes.append("IRC skipped: G4 failed")
 
-    # Thermochemistry at both steps; barrier only for a proper first-order saddle.
-    imag = freqs[freqs < -floor_cm]
+    imag = freqs[freqs < -fd.noise_floor_cm]
     real = freqs[freqs > 0]
-    barrier = None
-    by_step: dict[str, float] = {}
-    numerical_sigma = thermo_sigma = None
-    ts_point = StationaryPoint(x, float(energy), raws[h], freqs, None, None)
-    g_r_qh = reactant.g_total(True)
-    g_r_rrho = reactant.g_total(False)
-    if (
-        imag.size == 1
-        and real.size == freqs.size - 1
-        and g_r_qh is not None
-        and g_r_rrho is not None
-    ):
-        ts_point.thermo_qh = _thermo(c, system, x, real, c.symmetry_ts, True)
-        ts_point.thermo_rrho = _thermo(c, system, x, real, c.symmetry_ts, False)
-        quasi = c.quasi_harmonic
-        g_r = g_r_qh if quasi else g_r_rrho
-        g_ts = _g_total(ts_point, quasi)
-        assert g_ts is not None
-        barrier = units.hartree_to_kcal_mol(g_ts - g_r)
-        by_step[f"{h:.3g}"] = barrier
-        raw2 = raws[2 * h]
-        f2 = np.asarray(_core.analyze_vibrations(0.5 * (raw2 + raw2.T), x, c.masses).frequencies_cm)
-        real2 = f2[f2 > 0]
-        if real2.size == real.size:
-            t2 = _thermo(c, system, x, real2, c.symmetry_ts, quasi)
-            b2 = units.hartree_to_kcal_mol(energy + t2.g_correction - g_r)
-            by_step[f"{2 * h:.3g}"] = b2
-            numerical_sigma = abs(barrier - b2)
-        g_ts_other = _g_total(ts_point, not quasi)
-        g_r_other = g_r_rrho if quasi else g_r_qh
-        assert g_ts_other is not None
-        thermo_sigma = abs(barrier - units.hartree_to_kcal_mol(g_ts_other - g_r_other))
+    ts = StationaryPoint(x, float(energy), raws[h], freqs, None, None)
+    clean_saddle = imag.size == 1 and real.size == freqs.size - 1
+    reactant_thermo = reactant.g_total(True) is not None and reactant.g_total(False) is not None
+    if clean_saddle and reactant_thermo:
+        barrier = _stage_barrier(c, ts, raws, h, real, reactant)
     else:
+        barrier = _Barrier()
         notes.append("barrier not computed: TS is not a clean first-order saddle")
 
-    # Tunneling, reported separately. Eckart barriers are ZPE-corrected and
-    # measured from the IRC endpoint minima on each side (for bimolecular
-    # reactions these are the pre- and post-reaction complexes).
     tun: dict[str, Any] = {}
     endpoint_minima: dict[str, float] = {}
     if imag.size == 1:
-        tun["wigner"] = tunneling.wigner(float(imag[0]), c.hypothesis.temperature_k)
-        reactant_branch = next((b for b, i in irc_info.items() if i["matches_reactant"]), None)
-        product_branch = next((b for b, i in irc_info.items() if i["matches_product"]), None)
-        if reactant_branch and product_branch and ts_point.thermo_qh is not None:
-            ends_min = {}
-            for label, branch in (("reactant", reactant_branch), ("product", product_branch)):
-                pt, _ = _minimum(counter, c, system, end_points[branch], h, store, settings, 1)
-                ends_min[label] = pt
-            for label, pt in ends_min.items():
-                endpoint_minima[label] = units.hartree_to_kcal_mol(pt.energy - reactant.energy)
-            if all(pt.thermo_qh is not None for pt in ends_min.values()):
-                e_ts = energy + ts_point.thermo_qh.zpe
-                v_f = e_ts - (ends_min["reactant"].energy + ends_min["reactant"].thermo_qh.zpe)  # type: ignore[union-attr]
-                v_r = e_ts - (ends_min["product"].energy + ends_min["product"].thermo_qh.zpe)  # type: ignore[union-attr]
-                if v_f > 0 and v_r > 0:
-                    tun["eckart"] = tunneling.eckart(
-                        float(imag[0]), v_f, v_r, c.hypothesis.temperature_k
-                    )
-                    tun["forward_barrier_kcal_mol"] = units.hartree_to_kcal_mol(v_f)
-                    tun["reverse_barrier_kcal_mol"] = units.hartree_to_kcal_mol(v_r)
-        if "eckart" not in tun:
-            tun["eckart_note"] = "Eckart not computed: IRC endpoints missing or not ZPE-corrected"
+        tun, endpoint_minima = _stage_tunneling(
+            c, counter, float(imag[0]), ts, irc, endpoints, h, store, settings, reactant
+        )
 
     return PathwayAnalysis(
         pathway=p,
         evidence=evidence,
-        ts=ts_point,
-        barrier_kcal_mol=barrier,
-        barrier_by_step=by_step,
-        numerical_sigma=numerical_sigma,
-        thermo_sigma=thermo_sigma,
-        noise_epsilon=float(eps),
-        noise_floor_cm=floor_cm,
+        ts=ts,
+        barrier_kcal_mol=barrier.value,
+        barrier_by_step=barrier.by_step,
+        numerical_sigma=barrier.numerical_sigma,
+        thermo_sigma=barrier.thermo_sigma,
+        noise_epsilon=fd.epsilon,
+        noise_floor_cm=fd.noise_floor_cm,
         step=h,
         tunneling=tun,
-        irc=irc_info,
+        irc=irc,
         notes=notes,
         n_gradients=counter.calls,
         electronic_barrier_kcal_mol=units.hartree_to_kcal_mol(float(energy) - reactant.energy),
         endpoint_minima_kcal_mol=endpoint_minima,
     )
+
+
+# --------------------------------------------------------------------------- one model
+
+
+def _run_variant(
+    c: Campaign,
+    name: str,
+    variant: Mapping[str, Any] | None,
+    starts: Mapping[str, FloatArray] | None,
+    store: StencilStore,
+    env: Mapping[str, str],
+) -> tuple[ReactantSet, dict[str, PathwayAnalysis], dict[str, Any]]:
+    """Minimize reactants and analyze every pathway with one (variant) model.
+
+    ``starts`` replaces the campaign TS guesses (variants restart from the
+    baseline TSs). A ``rotation_seed`` in the variant rigidly rotates every
+    input geometry (spec §6 rotation test). Returns the reactants, the
+    analyses and the model's self-description.
+    """
+    settings_overrides = dict(variant or {})
+    seed = settings_overrides.pop("rotation_seed", None)
+    reactant_coords = c.reactant_coords
+    if seed is not None:
+        rotation = _random_rotation(int(seed))
+        reactant_coords = _rotate(reactant_coords, rotation)
+        source = starts if starts is not None else c.ts_guesses
+        starts = {k: _rotate(v, rotation) for k, v in source.items()}
+    provider = build_provider(c.model_spec, settings_overrides or None, c.system_info())
+    try:
+        described = dict(provider.describe())
+        settings = _provenance(c, c.reactant_coords, name, env, described).settings_fingerprint()
+        species = []
+        for i in range(len(c.hypothesis.reactants)):
+            point, converged = _minimum(
+                provider.fragment(i),
+                c,
+                c.species(i),
+                c.species_coords(reactant_coords, i),
+                SPECIES_STEP,
+                store,
+                f"{settings}/species{i}",
+                c.symmetry_species[i],
+            )
+            if not converged:
+                raise CampaignError(f"[{name}] minimization of species {i} did not converge")
+            species.append(point)
+        reactant = ReactantSet(species)
+        analyses = {
+            p.name: analyze_pathway(
+                c,
+                p,
+                provider,
+                reactant,
+                store,
+                settings,
+                None if starts is None else starts.get(p.name),
+            )
+            for p in c.hypothesis.pathways
+        }
+        return reactant, analyses, described
+    finally:
+        provider.close()
 
 
 def _outcome(
@@ -725,14 +806,119 @@ def _outcome(
     )
 
 
-@dataclass
-class CampaignResult:
-    campaign: Campaign
-    limit_kcal_mol: float
-    analyses: dict[str, PathwayAnalysis]
-    verdicts: dict[str, Any]
-    summary: dict[str, Any]
-    out_dir: Path
+def _preliminary_verdicts(
+    analyses: Mapping[str, PathwayAnalysis],
+    terms: Mapping[str, Term],
+    evaluated: Mapping[str, bool],
+    limit: float,
+) -> dict[str, VerdictResult]:
+    """Verdicts from gates G1-G7 only; G8 compares these across variants."""
+    for a in analyses.values():
+        a.evidence = a.evidence.replace(competitors_evaluated=evaluated)
+    return decide(
+        [
+            _outcome(
+                a, [gate(a.evidence) for gate in G.GATES_BEFORE_ROBUSTNESS], a.uncertainty(terms)
+            )
+            for a in analyses.values()
+        ],
+        limit,
+    )
+
+
+def _with_measured_grid_term(
+    c: Campaign, a: PathwayAnalysis, variants: Mapping[str, VariantOutcome]
+) -> UncertaintyBudget:
+    """Budget with sigma_grid taken from the rotation and grid variants when run."""
+    shifts = [
+        abs(v.barrier_kcal_mol - a.barrier_kcal_mol)
+        for k in ("rotation", "grid")
+        if (v := variants.get(k)) is not None
+        and v.barrier_kcal_mol is not None
+        and a.barrier_kcal_mol is not None
+    ]
+    if not shifts:
+        return a.uncertainty(c.uncertainty)
+    measured = max(shifts)
+    stated = c.uncertainty.get("grid")
+    stated_value = stated.value_kcal_mol if stated is not None else None
+    terms = dict(c.uncertainty)
+    terms["grid"] = Term(
+        "grid",
+        max(measured, stated_value or 0.0),
+        "measured",
+        f"max barrier shift under rotation/grid variants {measured:.3f}",
+    )
+    return a.uncertainty(terms)
+
+
+def _rankings(c: Campaign, outcomes: Mapping[str, PathwayOutcome]) -> list[dict[str, Any]]:
+    """Every declared pair of competing pathways, ranked at 2 sigma."""
+    rankings = []
+    compare = list(c.hypothesis.compare)
+    for i, a_name in enumerate(compare):
+        for b_name in compare[i + 1 :]:
+            r = rank_pair(outcomes[a_name], outcomes[b_name])
+            rankings.append(
+                {
+                    "pair": [a_name, b_name],
+                    "resolved": r.resolved,
+                    "lower": r.lower,
+                    "reason": r.reason,
+                }
+            )
+    return rankings
+
+
+def _none_if_nan(x: float) -> float | None:
+    return None if math.isnan(x) else x
+
+
+def _pathway_summary(
+    c: Campaign,
+    a: PathwayAnalysis,
+    verdict: VerdictResult,
+    budget: UncertaintyBudget,
+    gates: Sequence[G.GateResult],
+    variants: Mapping[str, VariantOutcome],
+    limit: float,
+) -> dict[str, Any]:
+    """One pathway's entry in campaign.json (also stored with its TS result)."""
+    ts = a.ts
+    return {
+        "pathway": a.pathway.name,
+        "campaign": str(c.path.resolve()),
+        "hypothesis": c.hypothesis.id,
+        "verdict": verdict.verdict.value,
+        "reason": verdict.reason,
+        "barrier_kcal_mol": a.barrier_kcal_mol,
+        "electronic_barrier_kcal_mol": a.electronic_barrier_kcal_mol,
+        "endpoint_minima_kcal_mol": a.endpoint_minima_kcal_mol,
+        "sigma_kcal_mol": verdict.sigma_kcal_mol,
+        "limit_kcal_mol": limit,
+        "uncertainty": [
+            {"component": comp, "value": val, "source": src, "note": note}
+            for comp, val, src, note in budget.breakdown()
+        ],
+        "gates": [dataclasses.asdict(g) for g in gates],
+        "imaginary_frequency_cm": float(ts.frequencies_cm[0]) if ts is not None else None,
+        "frequencies_cm": [float(f) for f in ts.frequencies_cm] if ts is not None else [],
+        "noise_epsilon_eh_bohr": _none_if_nan(a.noise_epsilon),
+        "noise_floor_cm": _none_if_nan(a.noise_floor_cm),
+        "fd_step_bohr": _none_if_nan(a.step),
+        "barrier_by_step": a.barrier_by_step,
+        "robustness": {
+            k: {"verdict": v.verdict, "barrier_kcal_mol": v.barrier_kcal_mol, "reason": v.reason}
+            for k, v in variants.items()
+        },
+        "tunneling": a.tunneling,
+        "irc": a.irc,
+        "notes": a.notes,
+        "n_gradients": a.n_gradients,
+    }
+
+
+# --------------------------------------------------------------------------- campaign
 
 
 def run_campaign(
@@ -753,172 +939,44 @@ def run_campaign(
     env = collect_environment()
     limit = barrier_limit_kcal_mol(c.hypothesis.temperature_k, c.hypothesis.target_half_life_s)
 
-    described: dict[str, Any] = {}
-
-    def run_variant(
-        name: str, variant: Mapping[str, Any] | None, starts: Mapping[str, FloatArray] | None
-    ) -> tuple[ReactantSet, dict[str, PathwayAnalysis]]:
-        variant = dict(variant or {})
-        seed = variant.pop("rotation_seed", None)
-        rotation = None if seed is None else _random_rotation(int(seed))
-        reactant_coords = (
-            c.reactant_coords if rotation is None else _rotate(c.reactant_coords, rotation)
-        )
-        if rotation is not None:
-            # Rigid reorientation of every input geometry (spec §6 rotation test).
-            source = starts if starts is not None else c.ts_guesses
-            starts = {k: _rotate(v, rotation) for k, v in source.items()}
-        provider = build_provider(c.model_spec, variant or None, c.system_info())
-        try:
-            if name == "baseline":
-                described.update(provider.describe())
-            settings = _provenance(
-                c, c.reactant_coords, name, env, provider.describe()
-            ).settings_fingerprint()
-            species = []
-            for i in range(len(c.hypothesis.reactants)):
-                atoms = _species_atoms(c, i)
-                point, ok = _minimum(
-                    provider.fragment(i),
-                    c,
-                    atoms,
-                    reactant_coords[3 * c.species_slice(i).start : 3 * c.species_slice(i).stop],
-                    1e-3,
-                    store,
-                    f"{settings}/species{i}",
-                    c.symmetry_species[i],
-                )
-                if not ok:
-                    raise CampaignError(f"[{name}] minimization of species {i} did not converge")
-                species.append(point)
-            reactant = ReactantSet(species)
-            analyses = {
-                p.name: analyze_pathway(
-                    c,
-                    p,
-                    provider,
-                    reactant,
-                    store,
-                    settings,
-                    None if starts is None else starts.get(p.name),
-                )
-                for p in c.hypothesis.pathways
-            }
-            return reactant, analyses
-        finally:
-            provider.close()
-
-    reactant, analyses = run_variant("baseline", None, None)
+    # 1. Baseline model: every pathway, then verdicts from G1-G7.
+    reactant, analyses, described = _run_variant(c, "baseline", None, None, store, env)
     evaluated = {n: a.completed for n, a in analyses.items()}
-    for a in analyses.values():
-        a.evidence = a.evidence.replace(competitors_evaluated=evaluated)
+    baseline = _preliminary_verdicts(analyses, c.uncertainty, evaluated, limit)
 
-    budgets = {n: a.uncertainty(c.uncertainty) for n, a in analyses.items()}
-    pre_gates = {n: [g(a.evidence) for g in G.ALL_GATES[:7]] for n, a in analyses.items()}
-    baseline = decide([_outcome(a, pre_gates[n], budgets[n]) for n, a in analyses.items()], limit)
-
-    # Robustness: rerun from the baseline TS geometries with each variant model.
+    # 2. Robustness: rerun from the baseline TS geometries with each variant model.
     starts = {n: a.ts.coords for n, a in analyses.items() if a.ts is not None}
-    variant_verdicts: dict[str, dict[str, str]] = {n: {} for n in analyses}
-    variant_barriers: dict[str, dict[str, float | None]] = {n: {} for n in analyses}
-    variant_reasons: dict[str, dict[str, str]] = {n: {} for n in analyses}
     robustness = dict(c.robustness)
     if _is_dft(c.model_spec):
         # DFT grids are not rotationally invariant; G8 includes a rotation test.
         robustness.setdefault("rotation", {"rotation_seed": ROTATION_SEED})
+    variants: dict[str, dict[str, VariantOutcome]] = {n: {} for n in analyses}
     for vname, vspec in robustness.items():
-        _, va = run_variant(vname, vspec, starts)
-        for a in va.values():
-            a.evidence = a.evidence.replace(competitors_evaluated=evaluated)
-        vb = {n: a.uncertainty(c.uncertainty) for n, a in va.items()}
-        vg = {n: [g(a.evidence) for g in G.ALL_GATES[:7]] for n, a in va.items()}
-        vd = decide([_outcome(a, vg[n], vb[n]) for n, a in va.items()], limit)
+        _, va, _ = _run_variant(c, vname, vspec, starts, store, env)
+        vd = _preliminary_verdicts(va, c.uncertainty, evaluated, limit)
         for n in analyses:
-            variant_verdicts[n][vname] = vd[n].verdict.value
-            variant_barriers[n][vname] = va[n].barrier_kcal_mol
-            variant_reasons[n][vname] = vd[n].reason
+            variants[n][vname] = VariantOutcome(
+                vd[n].verdict.value, va[n].barrier_kcal_mol, vd[n].reason
+            )
 
+    # 3. Final gates (now including G8), measured sigma_grid, verdicts, rankings.
     final_gates: dict[str, list[G.GateResult]] = {}
     for n, a in analyses.items():
         a.evidence = a.evidence.replace(
-            baseline_verdict=baseline[n].verdict.value, robustness_verdicts=variant_verdicts[n]
+            baseline_verdict=baseline[n].verdict.value,
+            robustness_verdicts={k: v.verdict for k, v in variants[n].items()},
         )
         final_gates[n] = G.evaluate_all(a.evidence)
-    # sigma_grid is measured from the rotation and grid variants when available.
-    for n, a in analyses.items():
-        shifts = [
-            abs(b - a.barrier_kcal_mol)
-            for k in ("rotation", "grid")
-            if (b := variant_barriers[n].get(k)) is not None and a.barrier_kcal_mol is not None
-        ]
-        if shifts:
-            measured = max(shifts)
-            stated = c.uncertainty.get("grid")
-            stated_value = stated.value_kcal_mol if stated is not None else None
-            value = max(measured, stated_value or 0.0)
-            terms = dict(c.uncertainty)
-            terms["grid"] = Term(
-                "grid",
-                value,
-                "measured",
-                f"max barrier shift under rotation/grid variants {measured:.3f}",
-            )
-            budgets[n] = a.uncertainty(terms)
+    budgets = {n: _with_measured_grid_term(c, a, variants[n]) for n, a in analyses.items()}
     outcomes = {n: _outcome(a, final_gates[n], budgets[n]) for n, a in analyses.items()}
     verdicts = decide(list(outcomes.values()), limit)
 
-    rankings = []
-    compare = list(c.hypothesis.compare)
-    for i, a_name in enumerate(compare):
-        for b_name in compare[i + 1 :]:
-            r = rank_pair(outcomes[a_name], outcomes[b_name])
-            rankings.append(
-                {
-                    "pair": [a_name, b_name],
-                    "resolved": r.resolved,
-                    "lower": r.lower,
-                    "reason": r.reason,
-                }
-            )
-
+    # 4. Write results: one HDF5 per TS and the campaign summary.
     pathway_summaries: dict[str, Any] = {}
     for n, a in analyses.items():
-        v = verdicts[n]
-        summary = {
-            "pathway": n,
-            "campaign": str(c.path.resolve()),
-            "hypothesis": c.hypothesis.id,
-            "verdict": v.verdict.value,
-            "reason": v.reason,
-            "barrier_kcal_mol": a.barrier_kcal_mol,
-            "electronic_barrier_kcal_mol": a.electronic_barrier_kcal_mol,
-            "endpoint_minima_kcal_mol": a.endpoint_minima_kcal_mol,
-            "sigma_kcal_mol": v.sigma_kcal_mol,
-            "limit_kcal_mol": limit,
-            "uncertainty": [
-                {"component": comp, "value": val, "source": src, "note": note}
-                for comp, val, src, note in budgets[n].breakdown()
-            ],
-            "gates": [dataclasses.asdict(g) for g in final_gates[n]],
-            "imaginary_frequency_cm": float(a.ts.frequencies_cm[0]) if a.ts is not None else None,
-            "frequencies_cm": [float(f) for f in a.ts.frequencies_cm] if a.ts is not None else [],
-            "noise_epsilon_eh_bohr": None if math.isnan(a.noise_epsilon) else a.noise_epsilon,
-            "noise_floor_cm": None if math.isnan(a.noise_floor_cm) else a.noise_floor_cm,
-            "fd_step_bohr": None if math.isnan(a.step) else a.step,
-            "barrier_by_step": a.barrier_by_step,
-            "robustness": {
-                k: {
-                    "verdict": variant_verdicts[n][k],
-                    "barrier_kcal_mol": variant_barriers[n][k],
-                    "reason": variant_reasons[n][k],
-                }
-                for k in variant_verdicts[n]
-            },
-            "tunneling": a.tunneling,
-            "irc": a.irc,
-            "notes": a.notes,
-            "n_gradients": a.n_gradients,
-        }
+        summary = _pathway_summary(
+            c, a, verdicts[n], budgets[n], final_gates[n], variants[n], limit
+        )
         pathway_summaries[n] = summary
         if a.ts is not None:
             (out / n).mkdir(parents=True, exist_ok=True)
@@ -934,7 +992,6 @@ def run_campaign(
                 summary,
                 overwrite=overwrite,
             )
-
     campaign_summary = {
         "campaign": str(c.path),
         "hypothesis": c.hypothesis.id,
@@ -944,7 +1001,7 @@ def run_campaign(
         "reactant_energy_eh": reactant.energy,
         "model": described,
         "pathways": pathway_summaries,
-        "rankings": rankings,
+        "rankings": _rankings(c, outcomes),
         "environment": env,
     }
     summary_path.write_text(
@@ -957,6 +1014,8 @@ def run_campaign(
 
 
 __all__ = [
+    "CAMPAIGN_SCHEMA_VERSION",
+    "Campaign",
     "CampaignError",
     "CampaignResult",
     "Verdict",
