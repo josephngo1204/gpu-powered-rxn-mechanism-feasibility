@@ -1,6 +1,7 @@
 add_subdirectory(linalg)
 add_subdirectory(surfaces)
 add_subdirectory(hess)
+add_subdirectory(search)
 if(SADDLE_BUILD_PYTHON)
   add_subdirectory(bindings)
 endif()
