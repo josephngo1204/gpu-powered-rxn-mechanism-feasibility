@@ -10,10 +10,12 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import yaml
 
 from saddle import _core
 from saddle.analysis.hessian_quality import assess_hessians
 from saddle.store.results import read_result
+from saddle.workflows.dashboard import Run, render_dashboard
 from saddle.workflows.models import Model, build_model
 from saddle.workflows.pipeline import (
     FOURTH_DERIVATIVE_ESTIMATE,
@@ -132,6 +134,35 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_runs(paths: Sequence[str]) -> list[Run]:
+    """Each path is a run directory or a parent of run directories."""
+    found: list[Path] = []
+    for raw in paths:
+        p = Path(raw)
+        if (p / "campaign.json").exists():
+            found.append(p)
+        elif p.is_dir():
+            found.extend(sorted(c.parent for c in p.glob("*/campaign.json")))
+        else:
+            raise CliError(f"{raw} is not a run directory")
+    if not found:
+        raise CliError("no campaign.json found under " + ", ".join(paths))
+    return [Run(label=d.name, doc=json.loads((d / "campaign.json").read_text())) for d in found]
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    runs = _find_runs(args.runs)
+    refs: dict[str, Any] = {}
+    if args.references:
+        ref_path = Path(args.references)
+        if not ref_path.exists():
+            raise CliError(f"references file {ref_path} not found")
+        refs = yaml.safe_load(ref_path.read_text()) or {}
+    Path(args.out).write_text(render_dashboard(runs, refs))
+    print(f"dashboard: {args.out} ({len(runs)} campaigns)")
+    return 0
+
+
 def cmd_bench(args: argparse.Namespace) -> int:
     raise CliError("benchmarks measure cuEST on a GPU and are not available until Phase F")
 
@@ -169,6 +200,16 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--format", default="markdown", choices=["markdown", "json"])
     report.add_argument("--out", default=None)
     report.set_defaults(func=cmd_report)
+
+    dash = sub.add_parser("dashboard", help="render an HTML dashboard over finished runs")
+    dash.add_argument("runs", nargs="+", help="run directories, or parents of run directories")
+    dash.add_argument("--out", default="dashboard.html")
+    dash.add_argument(
+        "--references",
+        default="data/references.yaml" if Path("data/references.yaml").exists() else None,
+        help="reference values to overlay (default: data/references.yaml if present)",
+    )
+    dash.set_defaults(func=cmd_dashboard)
 
     bench = sub.add_parser("bench", help="cuEST performance benchmarks (Phase F)")
     bench.add_argument("suite")
