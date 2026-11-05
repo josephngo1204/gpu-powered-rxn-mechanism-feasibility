@@ -1,0 +1,26 @@
+# C1 (spec section 3): Cl- + CH3Cl identity SN2 in the gas phase.
+# Tests the surface, not the rate: trajectory studies found non-RRKM behaviour,
+# so the TST verdict is reported but C1 is judged on the double-well profile
+# (complex and TS energies vs CCSD(T), data/references.yaml).
+schema_version: 1
+hypothesis: c1_hypothesis.yaml
+model:
+  type: cuest
+  functional: WB97X-V        # spec section 4 default
+  basis: def2-SVPD           # search profile
+  auxiliary_basis: def2-universal-jkfit
+  grid: "(75,302)"
+  math_mode: native-fp64
+pathways:
+  sn2: {ts_guess: species/ts_sn2.xyz}
+symmetry_numbers: {chloride: 1, chloromethane: 3, ts: 6}
+quasi_harmonic: true
+uncertainty:
+  basis: {value: 1.0, source: estimate, note: "def2-SVPD search profile; def2-TZVPD single points pending"}
+  method: {value: 1.5, source: estimate, note: "DFT vs CCSD(T) for SN2 barriers; refine from C3 benchmarks"}
+  grid: {value: 0.1, source: estimate, note: "(75,302); the G8 grid variant measures it"}
+  solvent: {value: 0.0, source: estimate, note: "gas phase"}
+robustness:
+  grid: {grid: "(99,590)"}
+  precision: {math_mode: default}
+  functional: {functional: M06-2X}

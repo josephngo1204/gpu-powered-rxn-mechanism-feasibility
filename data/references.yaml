@@ -1,0 +1,18 @@
+# Literature reference values (spec §12: cite every reference value).
+# Values are kcal/mol relative to separated reactants unless noted.
+c1_cl_ch3cl_gas:
+  citation: >-
+    Spec section 3 table (C1): CCSD(T)/aug-cc-pVQZ benchmark of the gas-phase
+    Cl- + CH3Cl identity SN2 reaction. Primary source to be confirmed before
+    Stage 5 (spec section 16 asks for primary-source checks).
+  quantity: electronic energy relative to separated Cl- + CH3Cl
+  complex_kcal_mol: -10.42
+  ts_kcal_mol: 2.52
+c3_ccsdt_ts:
+  citation: Spec section 3 table "C3 reference energies" (CCSD(T)); primary source to be confirmed.
+  quantity: TS electronic energy relative to separated reactants
+  F_minus: {sn2: 2.20, anti_e2: -1.27, syn_e2: 5.68}
+  Cl_minus: {sn2: 5.81, anti_e2: 18.18, syn_e2: 30.92}
+c8_solvolysis_1_phenylethyl_76C_80EtOH:
+  citation: Spec section 3 table "C8 relative rates"; Bentley update to be checked (spec section 3).
+  rate_ratio: {OTf_vs_OTs: 3800, ONs_vs_OTs: 12, OTs_vs_OMs: 1.2}
