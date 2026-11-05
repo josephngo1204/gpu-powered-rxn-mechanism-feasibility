@@ -558,6 +558,8 @@ def run_campaign(
         v = verdicts[n]
         summary = {
             "pathway": n,
+            "campaign": str(c.path.resolve()),
+            "hypothesis": c.hypothesis.id,
             "verdict": v.verdict.value,
             "reason": v.reason,
             "barrier_kcal_mol": a.barrier_kcal_mol,
