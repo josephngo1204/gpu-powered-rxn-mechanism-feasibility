@@ -27,4 +27,23 @@ struct RfoStep {
 [[nodiscard]] RfoStep rs_rfo_minimize_step(const Eigen::MatrixXd& hessian,
                                            const Eigen::VectorXd& gradient, double trust);
 
+// Bofill update: phi * SR1 + (1 - phi) * PSB, phi = (s.xi)^2 / (|s|^2 |xi|^2),
+// xi = y - H s. Allows negative curvature, as saddle searches need.
+[[nodiscard]] Eigen::MatrixXd bofill_update(const Eigen::MatrixXd& h, const Eigen::VectorXd& s,
+                                            const Eigen::VectorXd& y);
+
+struct PrfoStep {
+  Eigen::VectorXd step;
+  double predicted_change;
+  double alpha;
+  Eigen::VectorXd eigenvalues;   // Hessian eigenvalues, ascending
+  Eigen::MatrixXd eigenvectors;  // columns
+};
+
+// Restricted-step partitioned RFO (Baker 1986; Besalu and Bofill 1998):
+// maximize along eigenvector `mode`, minimize along the rest, with a common
+// alpha >= 1 so |step| <= trust.
+[[nodiscard]] PrfoStep rs_prfo_step(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& gradient,
+                                    double trust, Eigen::Index mode);
+
 }  // namespace saddle::search
