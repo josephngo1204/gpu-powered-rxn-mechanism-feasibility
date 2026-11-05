@@ -90,6 +90,7 @@ class XCIntPlan:
         self.handle = handle
         self.functional = functional_key(functional)
         self.nao = basis.num_ao
+        self.natom = len(basis.symbols)
         self.grid = grid
         self._buffer = WorkspaceDescriptor(0, int(buffer_bytes))
         self.raw = cb.cuestXCIntPlanHandle()
@@ -199,6 +200,57 @@ class XCIntPlan:
                 attrs.CUEST_NONLOCALXCPOTENTIALRKSCOMPUTE_PARAMETERS_VV10_B: self.vv10_b,
                 attrs.CUEST_NONLOCALXCPOTENTIALRKSCOMPUTE_PARAMETERS_VV10_C: self.vv10_c,
                 attrs.CUEST_NONLOCALXCPOTENTIALRKSCOMPUTE_PARAMETERS_VV10_SCALE: self.vv10_scale,
+            },
+        )
+
+    def _gradient(
+        self, name: str, params_type: Any, occupied: Any, configure: dict[Any, float]
+    ) -> Any:
+        c = cupy.ascontiguousarray(occupied, dtype=cupy.float64)
+        out = cupy.empty((self.natom, 3))
+        with Parameters(params_type) as params:
+            for attribute, value in configure.items():
+                check(
+                    cb.cuestParametersConfigure(
+                        parametersType=params_type,
+                        parameters=params.raw,
+                        attribute=attribute,
+                        attributeValue=cb.data_double(value),
+                    ),
+                    f"cuestParametersConfigure({attribute})",
+                )
+            run_with_workspace(
+                name,
+                getattr(cb, f"{name}WorkspaceQuery"),
+                getattr(cb, name),
+                outputs=[out],
+                handle=self.handle.raw,
+                plan=self.raw,
+                parameters=params.raw,
+                variableBufferSize=self._buffer.pointer,
+                numOccupied=int(c.shape[0]),
+                coefficientMatrix=device_pointer(c, c.shape),
+                outGradient=device_pointer(out, (self.natom, 3)),
+            )
+        return out
+
+    def rks_gradient(self, occupied: Any) -> Any:
+        return self._gradient(
+            "cuestXCDerivativeRKSCompute", P.CUEST_XCDERIVATIVERKSCOMPUTE_PARAMETERS, occupied, {}
+        )
+
+    def rks_nonlocal_gradient(self, occupied: Any) -> Any:
+        if not self.is_vv10:
+            return cupy.zeros((self.natom, 3))
+        attrs = cb.CuestNonlocalXCDerivativeRKSComputeParametersAttributes
+        return self._gradient(
+            "cuestNonlocalXCDerivativeRKSCompute",
+            P.CUEST_NONLOCALXCDERIVATIVERKSCOMPUTE_PARAMETERS,
+            occupied,
+            {
+                attrs.CUEST_NONLOCALXCDERIVATIVERKSCOMPUTE_PARAMETERS_VV10_B: self.vv10_b,
+                attrs.CUEST_NONLOCALXCDERIVATIVERKSCOMPUTE_PARAMETERS_VV10_C: self.vv10_c,
+                attrs.CUEST_NONLOCALXCDERIVATIVERKSCOMPUTE_PARAMETERS_VV10_SCALE: self.vv10_scale,
             },
         )
 

@@ -1,5 +1,6 @@
 """Density-fitted Coulomb and exchange (spec §2: J and K always use DF in cuEST)."""
 
+from collections.abc import Sequence
 from typing import Any
 
 import cupy
@@ -47,6 +48,7 @@ class DFIntPlan:
         self.handle = handle
         self.nao = primary.num_ao
         self.naux = auxiliary.num_ao
+        self.natom = len(primary.symbols)
         self.exchange_fraction = float(exchange_fraction)
         self.lrc_exchange_fraction = float(lrc_exchange_fraction)
         self.lrc_omega = float(lrc_omega)
@@ -144,6 +146,67 @@ class DFIntPlan:
                 coefficientMatrix=device_pointer(c, c.shape),
                 outExchangeMatrix=device_pointer(out, (self.nao, self.nao)),
             )
+        return out
+
+    def jk_gradient(
+        self,
+        density_scale: float,
+        density: Any,
+        coefficient_scale: float,
+        occupied_sets: Sequence[Any],
+        *,
+        last_use: bool = False,
+    ) -> Any:
+        """d/dR [s_D E_J(D) + s_C sum_N E_K(C_N)] (natom, 3).
+
+        The spin formulation decides the scales (spec §8); the typed callers in
+        saddle.scf pass them (RKS: s_D = 2 with D = C C^T, s_C = -1, one set).
+        `last_use=True` lets cuEST overwrite the plan's tensors, after which the
+        plan is unusable (spec §8 hazard), so it defaults to recompute.
+        """
+        d = cupy.ascontiguousarray(density, dtype=cupy.float64)
+        mats = [cupy.ascontiguousarray(c, dtype=cupy.float64) for c in occupied_sets]
+        for c in mats:
+            if c.ndim != 2 or c.shape[1] != self.nao:
+                raise ValueError(f"coefficient sets must be (n_occ, {self.nao})")
+        stacked = cupy.concatenate([c.ravel() for c in mats]) if mats else cupy.zeros(1)
+        out = cupy.empty((self.natom, 3))
+        policy_enum = cb.CuestDFSymmetricDerivativeComputeMemoryPolicy
+        policy = (
+            policy_enum.CUEST_DFSYMMETRICDERIVATIVECOMPUTE_MEMORY_POLICY_OVERWRITE
+            if last_use
+            else policy_enum.CUEST_DFSYMMETRICDERIVATIVECOMPUTE_MEMORY_POLICY_RECOMPUTE
+        )
+        attr = cb.CuestDFSymmetricDerivativeComputeParametersAttributes
+        with Parameters(P.CUEST_DFSYMMETRICDERIVATIVECOMPUTE_PARAMETERS) as params:
+            check(
+                cb.cuestParametersConfigure(
+                    parametersType=P.CUEST_DFSYMMETRICDERIVATIVECOMPUTE_PARAMETERS,
+                    parameters=params.raw,
+                    attribute=attr.CUEST_DFSYMMETRICDERIVATIVECOMPUTE_PARAMETERS_MEMORY_POLICY,
+                    attributeValue=cb.data_cuestDFSymmetricDerivativeComputeMemoryPolicy_t(policy),
+                ),
+                "cuestParametersConfigure(MEMORY_POLICY)",
+            )
+            run_with_workspace(
+                "cuestDFSymmetricDerivativeCompute",
+                cb.cuestDFSymmetricDerivativeComputeWorkspaceQuery,
+                cb.cuestDFSymmetricDerivativeCompute,
+                outputs=[out],
+                handle=self.handle.raw,
+                plan=self.raw,
+                parameters=params.raw,
+                variableBufferSize=self._exchange_buffer.pointer,
+                densityScale=float(density_scale),
+                densityMatrix=device_pointer(d, (self.nao, self.nao)),
+                coefficientScale=float(coefficient_scale),
+                numCoefficientMatrices=len(mats),
+                numOccupied=[int(c.shape[0]) for c in mats],
+                coefficientMatrices=device_pointer(stacked, stacked.shape),
+                outGradient=device_pointer(out, (self.natom, 3)),
+            )
+        if last_use:
+            self.usable = False
         return out
 
     def close(self) -> None:

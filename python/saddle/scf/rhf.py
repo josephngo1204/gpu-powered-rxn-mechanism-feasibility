@@ -52,6 +52,8 @@ class SCFResult:
     grid: str | None = None
     solvation_energy: float = 0.0
     solvent: str | None = None
+    gradient: npt.NDArray[np.float64] | None = None  # (natom, 3), Eh/bohr
+    gradient_terms: dict[str, npt.NDArray[np.float64]] = field(default_factory=dict)
 
 
 def nuclear_repulsion(coords_bohr: npt.ArrayLike, charges: Sequence[float]) -> float:
@@ -62,6 +64,26 @@ def nuclear_repulsion(coords_bohr: npt.ArrayLike, charges: Sequence[float]) -> f
         for j in range(i):
             e += z[i] * z[j] / float(np.linalg.norm(x[i] - x[j]))
     return e
+
+
+# J/K gradient scales for the closed-shell (RKS) formulation, spec §8:
+# E_J = 2 E_J^bare(P), E_K = -E_K^bare(C_occ), P = C_occ C_occ^T.
+RKS_DENSITY_SCALE = 2.0
+RKS_COEFFICIENT_SCALE = -1.0
+
+
+def nuclear_repulsion_gradient(
+    coords_bohr: npt.ArrayLike, charges: Sequence[float]
+) -> npt.NDArray[np.float64]:
+    x = np.asarray(coords_bohr, dtype=np.float64).reshape(-1, 3)
+    z = np.asarray(charges, dtype=np.float64)
+    g = np.zeros_like(x)
+    for i in range(len(z)):
+        for j in range(len(z)):
+            if i != j:
+                d = x[i] - x[j]
+                g[i] -= z[i] * z[j] * d / float(np.linalg.norm(d)) ** 3
+    return g
 
 
 class DIIS:
@@ -106,6 +128,7 @@ def rks(
     functional: str | None = None,
     grid: GridSpec | None = None,
     solvent: PCMModel | None = None,
+    gradient: bool = False,
     charge: int = 0,
     threshold_pq: float = 1e-14,
     orbital_gradient_tol: float = 1e-8,
@@ -223,6 +246,36 @@ def rks(
             e_old = e_elec
             eps, c = diagonalize(diis.extrapolate(fock, err_o))
         eps, c = diagonalize(fock)
+        grad_total = None
+        terms: dict[str, npt.NDArray[np.float64]] = {}
+        if gradient:
+            if not converged:
+                raise SCFError("refusing to compute a gradient from an unconverged SCF")
+            c_occ = c[:, :n_occ]
+            c_rows = cupy.ascontiguousarray(c_occ.T)
+            p_half = c_occ @ c_occ.T
+            d_tot = 2.0 * p_half
+            w = 2.0 * (c_occ * eps[:n_occ]) @ c_occ.T
+            terms["kinetic"] = cupy.asnumpy(oei.kinetic_gradient(d_tot))
+            vb, vc = oei.potential_gradient(xyz, -cupy.asarray(z, dtype=cupy.float64), d_tot)
+            terms["nuclear_attraction"] = cupy.asnumpy(vb + vc)
+            terms["overlap"] = -cupy.asnumpy(oei.overlap_gradient(w))
+            terms["coulomb_exchange"] = cupy.asnumpy(
+                df.jk_gradient(
+                    RKS_DENSITY_SCALE,
+                    p_half,
+                    RKS_COEFFICIENT_SCALE if needs_k else 0.0,
+                    [c_rows],
+                )
+            )
+            if xc is not None:
+                terms["xc"] = cupy.asnumpy(xc.rks_gradient(c_rows))
+                if xc.is_vv10:
+                    terms["vv10"] = cupy.asnumpy(xc.rks_nonlocal_gradient(c_rows))
+            if pcm is not None:
+                terms["pcm"] = cupy.asnumpy(pcm.gradient(d_tot, q_pcm))
+            terms["nuclear_repulsion"] = nuclear_repulsion_gradient(xyz, z)
+            grad_total = np.sum(np.stack(list(terms.values())), axis=0)
         return SCFResult(
             energy=e_elec + e_nuc,
             electronic_energy=e_elec,
@@ -240,6 +293,8 @@ def rks(
             functional=functional,
             grid=None if grid is None else str(grid),
             solvation_energy=e_pcm,
+            gradient=grad_total,
+            gradient_terms=terms,
             solvent=None if solvent is None else f"{solvent.method} eps={solvent.epsilon}",
         )
     finally:
