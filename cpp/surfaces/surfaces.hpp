@@ -61,6 +61,29 @@ class Springs {
   int n_atoms_ = 0;
 };
 
+// Morse bond between atoms i and j: D (1 - exp(-a (r - re)))^2 - D.
+struct MorseBond {
+  int i;
+  int j;
+  double depth;
+  double alpha;
+  double r_eq;
+};
+
+// Sum of harmonic springs and Morse bonds on a Cartesian geometry. With two
+// Morse bonds to a transferring atom and a spring holding the donor and
+// acceptor apart, it is a bounded molecular double well with a real saddle.
+class PairModel {
+ public:
+  PairModel(std::vector<Spring> springs, std::vector<MorseBond> morse);
+  [[nodiscard]] Evaluation evaluate(const Geometry& geometry, const WarmStart& guess) const;
+
+ private:
+  Springs springs_;
+  std::vector<MorseBond> morse_;
+  int n_atoms_ = 0;
+};
+
 namespace detail {
 // Deterministic Gaussian noise keyed on geometry bits, seed and component.
 [[nodiscard]] Eigen::VectorXd geometry_noise(const Eigen::VectorXd& coords, double amplitude,

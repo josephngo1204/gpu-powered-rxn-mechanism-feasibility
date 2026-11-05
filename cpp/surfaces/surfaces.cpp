@@ -123,6 +123,36 @@ Evaluation Springs::evaluate(const Geometry& geometry, const WarmStart& /*guess*
   return Evaluation{Hartree{energy}, gradient, {}};
 }
 
+PairModel::PairModel(std::vector<Spring> springs, std::vector<MorseBond> morse)
+    : springs_(std::move(springs)), morse_(std::move(morse)) {
+  for (const auto& m : morse_) {
+    if (m.i < 0 || m.j < 0 || m.i == m.j || !(m.depth > 0.0 && m.alpha > 0.0 && m.r_eq > 0.0)) {
+      throw std::invalid_argument("PairModel: invalid Morse bond");
+    }
+    n_atoms_ = std::max({n_atoms_, m.i + 1, m.j + 1});
+  }
+}
+
+Evaluation PairModel::evaluate(const Geometry& geometry, const WarmStart& guess) const {
+  if (geometry.dimension() < 3 * n_atoms_ || geometry.dimension() % 3 != 0) {
+    throw ShapeError("PairModel: geometry has too few Cartesian coordinates");
+  }
+  Evaluation e = springs_.evaluate(geometry, guess);
+  double energy = e.energy.value();
+  for (const auto& m : morse_) {
+    const Eigen::Vector3d d = geometry.coords.segment<3>(3 * m.j) - geometry.coords.segment<3>(3 * m.i);
+    const double r = d.norm();
+    if (r == 0.0) throw std::domain_error("PairModel: atoms coincide");
+    const double ex = std::exp(-m.alpha * (r - m.r_eq));
+    energy += m.depth * (1.0 - ex) * (1.0 - ex) - m.depth;
+    const Eigen::Vector3d f = 2.0 * m.depth * m.alpha * ex * (1.0 - ex) * d / r;
+    e.gradient.segment<3>(3 * m.j) += f;
+    e.gradient.segment<3>(3 * m.i) -= f;
+  }
+  e.energy = Hartree{energy};
+  return e;
+}
+
 namespace detail {
 
 Eigen::VectorXd geometry_noise(const Eigen::VectorXd& coords, double amplitude,
