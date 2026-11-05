@@ -59,9 +59,7 @@ class EnergeticSpan:
     tdi: str
 
 
-def energetic_span(
-    states: Sequence[State], reaction_energy: float | None = None
-) -> EnergeticSpan:
+def energetic_span(states: Sequence[State], reaction_energy: float | None = None) -> EnergeticSpan:
     """Energetic span of a multistep pathway (Kozuch and Shaik).
 
     With ``reaction_energy=None`` the pathway is linear: only TS/intermediate
