@@ -50,5 +50,5 @@ packages = ["saddle"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["scipy", "scipy.*"]
+module = ["scipy", "scipy.*", "h5py", "h5py.*"]
 ignore_missing_imports = true
