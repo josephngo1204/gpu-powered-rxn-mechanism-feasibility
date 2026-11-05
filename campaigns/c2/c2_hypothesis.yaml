@@ -1,0 +1,15 @@
+schema_version: 1
+id: c2-cl-ch3cl-water
+temperature_K: 298.15
+target_half_life_s: 3600
+solvent: water
+charge: -1
+multiplicity: 1
+reactants:
+  - {name: chloride, xyz: species/chloride.xyz, atom_map: [1], charge: -1}
+  - {name: chloromethane, xyz: species/ch3cl.xyz, atom_map: [2, 3, 4, 5, 6]}
+pathways:
+  - name: sn2
+    breaking: [[2, 6]]
+    forming: [[1, 2]]
+compare: [sn2]

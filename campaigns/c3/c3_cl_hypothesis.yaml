@@ -1,0 +1,22 @@
+schema_version: 1
+id: c3-cl-ethyl-cl-gas
+temperature_K: 298.15
+target_half_life_s: 3600
+solvent: null
+charge: -1
+multiplicity: 1
+# Atom map: Nu(1) Ca(2) Cb(3) Cl(4) Ha(5,6) Hb(7 anti to Cl, 8, 9)
+reactants:
+  - {name: nucleophile, xyz: species/cl_minus.xyz, atom_map: [1], charge: -1}
+  - {name: ethyl_halide, xyz: species/ethyl_cl.xyz, atom_map: [2, 3, 4, 5, 6, 7, 8, 9]}
+pathways:
+  - name: sn2
+    breaking: [[2, 4]]
+    forming: [[1, 2]]
+  - name: anti_e2
+    breaking: [[3, 7], [2, 4]]
+    forming: [[1, 7]]
+  - name: syn_e2
+    breaking: [[3, 8], [2, 4]]
+    forming: [[1, 8]]
+compare: [sn2, anti_e2, syn_e2]

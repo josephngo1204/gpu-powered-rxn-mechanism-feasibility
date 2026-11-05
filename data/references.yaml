@@ -8,6 +8,13 @@ c1_cl_ch3cl_gas:
   quantity: electronic energy relative to separated Cl- + CH3Cl
   complex_kcal_mol: -10.42
   ts_kcal_mol: 2.52
+c2_cl_ch3cl_water:
+  citation: >-
+    Spec section 3 table (C2): estimated aqueous free-energy barrier of the
+    Cl- + CH3Cl identity SN2 reaction. An estimate, not a benchmark; primary
+    source to be confirmed (spec section 16).
+  quantity: free-energy barrier relative to separated solvated reactants, 298 K
+  barrier_kcal_mol: 26.0
 c3_ccsdt_ts:
   citation: Spec section 3 table "C3 reference energies" (CCSD(T)); primary source to be confirmed.
   quantity: TS electronic energy relative to separated reactants

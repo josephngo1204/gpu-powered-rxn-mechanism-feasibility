@@ -1,0 +1,27 @@
+# C3 (spec section 3): F- + CH3CH2F, SN2 vs anti-E2 vs syn-E2, gas phase.
+# Judged on the TS energy order against CCSD(T) (data/references.yaml c3_ccsdt_ts);
+# geometries from build_guesses.py.
+schema_version: 1
+hypothesis: c3_f_hypothesis.yaml
+model:
+  type: cuest
+  functional: WB97X-V        # spec section 4 default
+  basis: def2-SVPD           # anions: diffuse functions
+  auxiliary_basis: def2-universal-jkfit
+  grid: "(75,302)"
+  math_mode: native-fp64
+pathways:
+  sn2: {ts_guess: species/ts_sn2_f.xyz}
+  anti_e2: {ts_guess: species/ts_anti_e2_f.xyz}
+  syn_e2: {ts_guess: species/ts_syn_e2_f.xyz}
+symmetry_numbers: {nucleophile: 1, ethyl_halide: 1, ts: 1}   # all TSs are Cs
+quasi_harmonic: true
+uncertainty:
+  basis: {value: 1.0, source: estimate, note: "def2-SVPD search profile; def2-TZVPD single points pending"}
+  method: {value: 1.5, source: estimate, note: "DFT vs CCSD(T) for SN2/E2 barriers; replaced by the measured C3 deviation"}
+  grid: {value: 0.1, source: estimate, note: "(75,302); the G8 grid variant measures it"}
+  solvent: {value: 0.0, source: estimate, note: "gas phase"}
+robustness:
+  grid: {grid: "(99,590)"}
+  precision: {math_mode: default}
+  functional: {functional: M06-2X}
