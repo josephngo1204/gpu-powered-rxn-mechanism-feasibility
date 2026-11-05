@@ -39,6 +39,44 @@ class NoisyMullerBrown:
         Return (energy in Eh, gradient in Eh/bohr) at flattened coordinates in bohr.
         """
 
+class Springs:
+    def __init__(self, springs: Sequence[tuple[int, int, float, float]]) -> None:
+        """Pairwise harmonic springs given as (i, j, k, r0) tuples."""
+
+    def evaluate(self, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]) -> tuple[float, Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]:
+        """
+        Return (energy in Eh, gradient in Eh/bohr) at flattened coordinates in bohr.
+        """
+
+class VibrationalAnalysis:
+    @property
+    def frequencies_cm(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]: ...
+
+    @property
+    def modes_mass_weighted(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+
+    @property
+    def modes_cartesian(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+
+    @property
+    def n_external(self) -> int: ...
+
+    @property
+    def linear(self) -> bool: ...
+
+    @property
+    def max_external_residual_cm(self) -> float: ...
+
+    @property
+    def translation_sum_rule(self) -> float: ...
+
+    def n_imaginary(self, threshold_cm: float) -> int: ...
+
+def analyze_vibrations(hessian: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], masses_amu: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]) -> VibrationalAnalysis:
+    """
+    Harmonic analysis with translation/rotation projection. Frequencies in cm^-1, imaginary modes negative.
+    """
+
 def central_stencil(coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], step: float) -> list[tuple[int, int, Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]]:
     """
     Central-difference stencil as (coordinate, sign, displaced coords), in order.

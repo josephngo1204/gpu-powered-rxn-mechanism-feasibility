@@ -12,6 +12,7 @@
 
 #include "core/model.hpp"
 #include "hess/fd_hessian.hpp"
+#include "hess/vibrations.hpp"
 #include "surfaces/surfaces.hpp"
 
 namespace nb = nanobind;
@@ -49,6 +50,8 @@ NB_MODULE(_core, m) {
   using saddle::surfaces::Morse;
   using saddle::surfaces::MullerBrown;
   using NoisyMullerBrown = saddle::surfaces::Noisy<MullerBrown>;
+  using saddle::surfaces::Spring;
+  using saddle::surfaces::Springs;
 
   nb::class_<MullerBrown>(m, "MullerBrown")
       .def(nb::init<>())
@@ -70,6 +73,33 @@ NB_MODULE(_core, m) {
           },
           "amplitude"_a, "seed"_a)
       .def("evaluate", &evaluate<NoisyMullerBrown>, "coords"_a, kEvaluateDoc);
+
+  nb::class_<Springs>(m, "Springs")
+      .def(
+          "__init__",
+          [](Springs* self, const std::vector<std::tuple<int, int, double, double>>& springs) {
+            std::vector<Spring> s;
+            for (const auto& [i, j, k, r0] : springs) s.push_back({i, j, k, r0});
+            new (self) Springs(std::move(s));
+          },
+          "springs"_a, "Pairwise harmonic springs given as (i, j, k, r0) tuples.")
+      .def("evaluate", &evaluate<Springs>, "coords"_a, kEvaluateDoc);
+
+  nb::class_<saddle::hess::VibrationalAnalysis>(m, "VibrationalAnalysis")
+      .def_ro("frequencies_cm", &saddle::hess::VibrationalAnalysis::frequencies_cm)
+      .def_ro("modes_mass_weighted", &saddle::hess::VibrationalAnalysis::modes_mass_weighted)
+      .def_ro("modes_cartesian", &saddle::hess::VibrationalAnalysis::modes_cartesian)
+      .def_ro("n_external", &saddle::hess::VibrationalAnalysis::n_external)
+      .def_ro("linear", &saddle::hess::VibrationalAnalysis::linear)
+      .def_ro("max_external_residual_cm",
+              &saddle::hess::VibrationalAnalysis::max_external_residual_cm)
+      .def_ro("translation_sum_rule", &saddle::hess::VibrationalAnalysis::translation_sum_rule)
+      .def("n_imaginary", &saddle::hess::VibrationalAnalysis::n_imaginary, "threshold_cm"_a);
+
+  m.def("analyze_vibrations", &saddle::hess::analyze_vibrations, "hessian"_a, "coords"_a,
+        "masses_amu"_a,
+        "Harmonic analysis with translation/rotation projection. Frequencies in cm^-1, "
+        "imaginary modes negative.");
 
   m.def(
       "central_stencil",
