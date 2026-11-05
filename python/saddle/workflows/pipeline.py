@@ -45,6 +45,18 @@ FOURTH_DERIVATIVE_ESTIMATE = 2.0
 # Below this the probe cannot resolve noise (clean analytic surfaces).
 NOISE_RESOLUTION_FLOOR = 1e-10
 MIN_STEP, MAX_STEP = 1e-4, 2e-2
+# Reference-level refinement before a Hessian (spec §6 "Residual force"). At
+# the G1 limit (|g| ~ 1e-5) the residual force alone gives ~14 cm^-1 of
+# rotation-vibration mixing for hydrogen, above the 5 cm^-1 target.
+# PROPOSED value (spec gives none); see docs/adr/0002.
+REFERENCE_GTOL_RMS = 1e-7
+REFERENCE_GTOL_MAX = 1.5e-7
+# SCF orbital-gradient threshold for Hessian stencil gradients. At the 1e-8
+# reference threshold, SCF incompleteness acts as ~2e-9 Eh/bohr gradient noise
+# across stencil points (seen in the 1/h growth of the sum-rule error), which
+# the line-scan probe misses because the error varies smoothly along a
+# warm-started line. PROPOSED value; see docs/adr/0002.
+HESSIAN_ORBITAL_GRADIENT = 1e-10
 IRC_STEP = 0.05
 IRC_SWITCH_GRADIENT = 1e-3
 

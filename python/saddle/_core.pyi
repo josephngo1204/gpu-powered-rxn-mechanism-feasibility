@@ -81,10 +81,10 @@ class PairModel:
         Return (energy in Eh, gradient in Eh/bohr) at flattened coordinates in bohr.
         """
 
-def minimize(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], atomic_numbers: Sequence[int], max_iterations: int = 200, trust_radius: float = 0.1, exact_hessian: bool = True, fd_step: float = 0.0001) -> dict:
+def minimize(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], atomic_numbers: Sequence[int], max_iterations: int = 200, trust_radius: float = 0.1, exact_hessian: bool = True, fd_step: float = 0.0001, gtol_rms: float = 1e-05, gtol_max: float = 1.5e-05) -> dict:
     """RS-RFO minimization to the G1 thresholds. Returns a dict of results."""
 
-def saddle_search(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], atomic_numbers: Sequence[int], follow_direction: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] | None = None, max_iterations: int = 200, trust_radius: float = 0.1, fd_step: float = 0.0001) -> dict:
+def saddle_search(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], atomic_numbers: Sequence[int], follow_direction: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] | None = None, max_iterations: int = 200, trust_radius: float = 0.1, fd_step: float = 0.0001, gtol_rms: float = 1e-05, gtol_max: float = 1.5e-05) -> dict:
     """RS-P-RFO first-order saddle search with Bofill updates."""
 
 def irc(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], atomic_numbers: Sequence[int], hessian: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], masses: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], step: float = 0.05, max_steps: int = 300, switch_gradient: float = 0.001) -> dict:

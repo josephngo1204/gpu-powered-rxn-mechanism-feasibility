@@ -86,6 +86,24 @@ def nuclear_repulsion_gradient(
     return g
 
 
+def orthonormalize_guess(c_prev: Any, s: Any, n_occ: int) -> Any:
+    """Warm start (spec §6): Loewdin-orthonormalize previous MOs in the new overlap metric.
+
+    Only the occupied block matters for the first density, so the occupied
+    columns are orthonormalized: C' = C (C^T S C)^(-1/2).
+    """
+    if c_prev.ndim != 2 or c_prev.shape[0] != s.shape[0] or c_prev.shape[1] < n_occ:
+        raise SCFError(
+            f"guess orbitals {c_prev.shape} do not fit {s.shape[0]} AOs and {n_occ} occupied"
+        )
+    c_occ = c_prev[:, :n_occ]
+    m = c_occ.T @ s @ c_occ
+    w, v = cupy.linalg.eigh(m)
+    if float(w.min()) < 1e-8:
+        raise SCFError("guess orbitals are linearly dependent in the new metric")
+    return c_occ @ (v / cupy.sqrt(w)) @ v.T
+
+
 class DIIS:
     def __init__(self, size: int = 8) -> None:
         self.size = size
@@ -129,6 +147,7 @@ def rks(
     grid: GridSpec | None = None,
     solvent: PCMModel | None = None,
     gradient: bool = False,
+    guess: Any | None = None,
     charge: int = 0,
     threshold_pq: float = 1e-14,
     orbital_gradient_tol: float = 1e-8,
@@ -205,7 +224,10 @@ def rks(
             e, c_ortho = cupy.linalg.eigh(x.T @ f @ x)
             return e, x @ c_ortho
 
-        eps, c = diagonalize(h)  # core guess
+        if guess is not None:
+            c = orthonormalize_guess(cupy.asarray(guess), s, n_occ)
+        else:
+            eps, c = diagonalize(h)  # core guess
         e_nuc = nuclear_repulsion(xyz, z)
         diis = DIIS()
         history: list[float] = []

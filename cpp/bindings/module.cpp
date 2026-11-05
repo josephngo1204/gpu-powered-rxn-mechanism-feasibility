@@ -70,8 +70,11 @@ nb::dict to_dict(const saddle::search::OptimizationResult& r) {
 }
 
 saddle::search::OptimizerOptions optimizer_options(int max_iterations, double trust_radius,
-                                                   bool exact_hessian, double fd_step) {
+                                                   bool exact_hessian, double fd_step,
+                                                   double gtol_rms = 1e-5, double gtol_max = 1.5e-5) {
   saddle::search::OptimizerOptions o;
+  o.gtol_rms = gtol_rms;
+  o.gtol_max = gtol_max;
   o.max_iterations = max_iterations;
   o.trust_radius = trust_radius;
   o.initial_hessian = exact_hessian ? saddle::search::InitialHessian::Exact
@@ -170,25 +173,27 @@ NB_MODULE(_core, m) {
   m.def(
       "minimize",
       [](nb::object model, const Eigen::VectorXd& coords, const std::vector<int>& atomic_numbers,
-         int max_iterations, double trust_radius, bool exact_hessian, double fd_step) {
+         int max_iterations, double trust_radius, bool exact_hessian, double fd_step,
+         double gtol_rms, double gtol_max) {
         CallbackModel cb{std::move(model)};
         return to_dict(saddle::search::minimize(
             cb, make_geometry(coords, atomic_numbers),
-            optimizer_options(max_iterations, trust_radius, exact_hessian, fd_step)));
+            optimizer_options(max_iterations, trust_radius, exact_hessian, fd_step, gtol_rms,
+                              gtol_max)));
       },
       "model"_a, "coords"_a, "atomic_numbers"_a, "max_iterations"_a = 200, "trust_radius"_a = 0.1,
-      "exact_hessian"_a = true, "fd_step"_a = 1e-4,
+      "exact_hessian"_a = true, "fd_step"_a = 1e-4, "gtol_rms"_a = 1e-5, "gtol_max"_a = 1.5e-5,
       "RS-RFO minimization to the G1 thresholds. Returns a dict of results.");
 
   m.def(
       "saddle_search",
       [](nb::object model, const Eigen::VectorXd& coords, const std::vector<int>& atomic_numbers,
          std::optional<Eigen::VectorXd> follow_direction, int max_iterations, double trust_radius,
-         double fd_step) {
+         double fd_step, double gtol_rms, double gtol_max) {
         CallbackModel cb{std::move(model)};
         saddle::search::SaddleOptions o;
         static_cast<saddle::search::OptimizerOptions&>(o) =
-            optimizer_options(max_iterations, trust_radius, true, fd_step);
+            optimizer_options(max_iterations, trust_radius, true, fd_step, gtol_rms, gtol_max);
         if (follow_direction) o.follow_direction = *follow_direction;
         const auto r = saddle::search::saddle_search(cb, make_geometry(coords, atomic_numbers), o);
         nb::dict d = to_dict(r);
@@ -198,7 +203,8 @@ NB_MODULE(_core, m) {
         return d;
       },
       "model"_a, "coords"_a, "atomic_numbers"_a, "follow_direction"_a = nb::none(),
-      "max_iterations"_a = 200, "trust_radius"_a = 0.1, "fd_step"_a = 1e-4,
+      "max_iterations"_a = 200, "trust_radius"_a = 0.1, "fd_step"_a = 1e-4, "gtol_rms"_a = 1e-5,
+      "gtol_max"_a = 1.5e-5,
       "RS-P-RFO first-order saddle search with Bofill updates.");
 
   m.def(
