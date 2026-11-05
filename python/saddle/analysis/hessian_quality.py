@@ -118,6 +118,130 @@ def _spiky_columns(raw: FloatArray) -> list[int]:
     return [int(i) for i in np.flatnonzero(share > SPIKE_SHARE_RATIO * median)]
 
 
+@dataclass(frozen=True)
+class _StepMetrics:
+    """Worst-case single-Hessian metrics over all steps, and each step's frequencies."""
+
+    asymmetry: float
+    translation_cm: float
+    rotation_cm: float
+    flagged_columns: frozenset[int]
+    frequencies_cm: dict[float, FloatArray]
+
+
+def _step_metrics(
+    raw_by_step: Mapping[float, FloatArray],
+    coords: FloatArray,
+    masses: FloatArray,
+    t: HessianTargets,
+) -> _StepMetrics:
+    asymmetry = translation = rotation = 0.0
+    flagged: set[int] = set()
+    freqs: dict[float, FloatArray] = {}
+    for step, raw_in in raw_by_step.items():
+        raw = np.asarray(raw_in, dtype=np.float64)
+        norm = float(np.linalg.norm(raw))
+        a = float(np.linalg.norm(raw - raw.T) / norm) if norm > 0 else 0.0
+        asymmetry = max(asymmetry, a)
+        if a > t.max_asymmetry:
+            flagged.update(_spiky_columns(raw))
+        sym = 0.5 * (raw + raw.T)
+        t_res, r_res = external_residuals(sym, coords, masses)
+        translation = max(translation, t_res)
+        rotation = max(rotation, r_res)
+        freqs[step] = np.asarray(_core.analyze_vibrations(sym, coords, masses).frequencies_cm)
+    return _StepMetrics(asymmetry, translation, rotation, frozenset(flagged), freqs)
+
+
+def _single_hessian_checks(m: _StepMetrics, t: HessianTargets) -> list[Check]:
+    flagged = sorted(m.flagged_columns)
+    return [
+        Check("asymmetry", m.asymmetry, t.max_asymmetry, m.asymmetry <= t.max_asymmetry),
+        Check(
+            "column_spikes",
+            float(len(flagged)),
+            0.0,
+            not flagged,
+            detail=f"columns {flagged}" if flagged else "",
+        ),
+        Check(
+            "translation_residual",
+            m.translation_cm,
+            t.max_external_residual_cm,
+            m.translation_cm <= t.max_external_residual_cm,
+        ),
+        Check(
+            "rotation_residual",
+            m.rotation_cm,
+            t.max_external_residual_cm,
+            m.rotation_cm <= t.max_external_residual_cm,
+            informational=True,
+            detail="grid orientation error; judged by the G8 rotation test (user decision)",
+        ),
+    ]
+
+
+def _step_stability_checks(
+    freqs: Mapping[float, FloatArray], t: HessianTargets, imag_floor: float
+) -> list[Check]:
+    """Frequencies must not move between FD steps: stiff modes in cm^-1, imaginary in fraction."""
+    pairs = list(combinations(sorted(freqs), 2))
+    freq_change = imag_change = 0.0
+    for h1, h2 in pairs:
+        f1, f2 = freqs[h1], freqs[h2]
+        stable = (f1 > STABLE_MODE_FLOOR_CM) & (f2 > STABLE_MODE_FLOOR_CM)
+        if np.any(stable):
+            freq_change = max(freq_change, float(np.max(np.abs(f1[stable] - f2[stable]))))
+        imag = (f1 < -imag_floor) & (f2 < -imag_floor)
+        if np.any(imag):
+            rel = np.abs(f1[imag] - f2[imag]) / np.abs(f1[imag])
+            imag_change = max(imag_change, float(np.max(rel)))
+    evaluated = bool(pairs)
+    note = "" if evaluated else "needs Hessians at two or more accepted steps"
+    return [
+        Check(
+            "frequency_stability",
+            freq_change,
+            t.max_frequency_change_cm,
+            evaluated and freq_change <= t.max_frequency_change_cm,
+            evaluated=evaluated,
+            detail=note,
+        ),
+        Check(
+            "imaginary_stability",
+            imag_change,
+            t.max_imaginary_change_fraction,
+            evaluated and imag_change <= t.max_imaginary_change_fraction,
+            evaluated=evaluated,
+            detail=note,
+        ),
+    ]
+
+
+def _precision_check(delta_g_by_precision: Mapping[str, float] | None, t: HessianTargets) -> Check:
+    """Optional: the barrier must not move across math modes (precision ladder)."""
+    if not delta_g_by_precision:
+        return Check(
+            "precision_delta_g",
+            0.0,
+            t.max_delta_g_change_kcal_mol,
+            False,
+            evaluated=False,
+            required=False,
+            detail="no precision ladder supplied",
+        )
+    values = list(delta_g_by_precision.values())
+    spread = max(values) - min(values)
+    return Check(
+        "precision_delta_g",
+        spread,
+        t.max_delta_g_change_kcal_mol,
+        spread <= t.max_delta_g_change_kcal_mol,
+        required=False,
+        detail=f"modes {sorted(delta_g_by_precision)}",
+    )
+
+
 def assess_hessians(
     raw_by_step: Mapping[float, FloatArray],
     coords_bohr: FloatArray,
@@ -138,110 +262,12 @@ def assess_hessians(
     imag_floor = t.imaginary_threshold_cm if noise_floor_cm is None else noise_floor_cm
     coords = np.asarray(coords_bohr, dtype=np.float64)
     masses = np.asarray(masses_amu, dtype=np.float64)
-
-    asymmetry = 0.0
-    translation = 0.0
-    rotation = 0.0
-    flagged: set[int] = set()
-    freqs: dict[float, FloatArray] = {}
-    for step, raw in raw_by_step.items():
-        raw = np.asarray(raw, dtype=np.float64)
-        norm = float(np.linalg.norm(raw))
-        a = float(np.linalg.norm(raw - raw.T) / norm) if norm > 0 else 0.0
-        asymmetry = max(asymmetry, a)
-        if a > t.max_asymmetry:
-            flagged.update(_spiky_columns(raw))
-        sym = 0.5 * (raw + raw.T)
-        vib = _core.analyze_vibrations(sym, coords, masses)
-        t_res, r_res = external_residuals(sym, coords, masses)
-        translation = max(translation, t_res)
-        rotation = max(rotation, r_res)
-        freqs[step] = np.asarray(vib.frequencies_cm)
-
+    metrics = _step_metrics(raw_by_step, coords, masses, t)
     checks = [
-        Check("asymmetry", asymmetry, t.max_asymmetry, asymmetry <= t.max_asymmetry),
-        Check(
-            "column_spikes",
-            float(len(flagged)),
-            0.0,
-            not flagged,
-            detail=f"columns {sorted(flagged)}" if flagged else "",
-        ),
-        Check(
-            "translation_residual",
-            translation,
-            t.max_external_residual_cm,
-            translation <= t.max_external_residual_cm,
-        ),
-        Check(
-            "rotation_residual",
-            rotation,
-            t.max_external_residual_cm,
-            rotation <= t.max_external_residual_cm,
-            informational=True,
-            detail="grid orientation error; judged by the G8 rotation test (user decision)",
-        ),
+        *_single_hessian_checks(metrics, t),
+        *_step_stability_checks(metrics.frequencies_cm, t, imag_floor),
+        _precision_check(delta_g_by_precision, t),
     ]
-
-    pairs = list(combinations(sorted(freqs), 2))
-    freq_change = 0.0
-    imag_change = 0.0
-    for h1, h2 in pairs:
-        f1, f2 = freqs[h1], freqs[h2]
-        stable = (f1 > STABLE_MODE_FLOOR_CM) & (f2 > STABLE_MODE_FLOOR_CM)
-        if np.any(stable):
-            freq_change = max(freq_change, float(np.max(np.abs(f1[stable] - f2[stable]))))
-        imag = (f1 < -imag_floor) & (f2 < -imag_floor)
-        if np.any(imag):
-            rel = np.abs(f1[imag] - f2[imag]) / np.abs(f1[imag])
-            imag_change = max(imag_change, float(np.max(rel)))
-    evaluated = bool(pairs)
-    note = "" if evaluated else "needs Hessians at two or more accepted steps"
-    checks.append(
-        Check(
-            "frequency_stability",
-            freq_change,
-            t.max_frequency_change_cm,
-            evaluated and freq_change <= t.max_frequency_change_cm,
-            evaluated=evaluated,
-            detail=note,
-        )
+    return QualityReport(
+        tuple(checks), tuple(sorted(metrics.flagged_columns)), metrics.frequencies_cm
     )
-    checks.append(
-        Check(
-            "imaginary_stability",
-            imag_change,
-            t.max_imaginary_change_fraction,
-            evaluated and imag_change <= t.max_imaginary_change_fraction,
-            evaluated=evaluated,
-            detail=note,
-        )
-    )
-
-    if delta_g_by_precision:
-        values = list(delta_g_by_precision.values())
-        spread = max(values) - min(values)
-        checks.append(
-            Check(
-                "precision_delta_g",
-                spread,
-                t.max_delta_g_change_kcal_mol,
-                spread <= t.max_delta_g_change_kcal_mol,
-                required=False,
-                detail=f"modes {sorted(delta_g_by_precision)}",
-            )
-        )
-    else:
-        checks.append(
-            Check(
-                "precision_delta_g",
-                0.0,
-                t.max_delta_g_change_kcal_mol,
-                False,
-                evaluated=False,
-                required=False,
-                detail="no precision ladder supplied",
-            )
-        )
-
-    return QualityReport(tuple(checks), tuple(sorted(flagged)), freqs)
