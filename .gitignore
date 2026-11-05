@@ -1,0 +1,17 @@
+# Build and environment
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.hypothesis/
+
+# Results are ignored unless a release baseline (spec §10)
+results/
+runs/
+
+# Local Claude settings
+.claude/settings.local.json

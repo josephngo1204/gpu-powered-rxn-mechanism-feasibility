@@ -1,0 +1,25 @@
+# CPU development environment for Saddle (Phases A-E).
+# GPU packages (CUDA toolkit, libcuest) are added once the CUDA version decision is made.
+name: saddle
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - scipy
+  - pyyaml
+  - h5py
+  - cmake>=3.28
+  - ninja
+  - cxx-compiler
+  - eigen
+  - gtest
+  - rapidcheck
+  - nanobind
+  - scikit-build-core
+  - pytest
+  - pytest-cov
+  - hypothesis
+  - ruff
+  - mypy
+  - types-pyyaml
