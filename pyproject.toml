@@ -1,3 +1,7 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2"]
+build-backend = "scikit_build_core.build"
+
 [project]
 name = "saddle"
 version = "0.0.1"
@@ -11,8 +15,17 @@ dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy", "types-pyyaml"]
 [project.scripts]
 saddle = "saddle.cli:main"
 
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+wheel.packages = ["python/saddle"]
+build-dir = "build/python"
+editable.rebuild = false
+
+[tool.scikit-build.cmake.define]
+SADDLE_BUILD_PYTHON = "ON"
+SADDLE_BUILD_TESTS = "OFF"
+
 [tool.pytest.ini_options]
-pythonpath = ["python"]
 testpaths = ["tests"]
 markers = [
   "gpu: requires a GPU and cuEST",
