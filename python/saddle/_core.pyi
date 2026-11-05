@@ -1,6 +1,6 @@
 """Saddle C++ core"""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Annotated
 
 import numpy
@@ -95,6 +95,11 @@ def irc(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(Non
 def probe_noise(model: object, coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], direction: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], delta: float = 0.001, order: int = 6, n_samples: int = 16) -> tuple[float, int]:
     """
     Line-scan gradient noise estimate; returns (epsilon Eh/bohr, gradients used).
+    """
+
+def davidson(matvec: Callable[[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]], Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]], dimension: int, n_roots: int = 1, tolerance: float = 1e-06, max_matvecs: int = 100, diagonal: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] = ..., guess: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')] = ...) -> dict:
+    """
+    Lowest eigenpairs of a symmetric operator given only products (C++ Davidson).
     """
 
 def optimal_step(epsilon: float, fourth_derivative: float) -> float:

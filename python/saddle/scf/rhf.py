@@ -54,6 +54,10 @@ class SCFResult:
     solvent: str | None = None
     gradient: npt.NDArray[np.float64] | None = None  # (natom, 3), Eh/bohr
     gradient_terms: dict[str, npt.NDArray[np.float64]] = field(default_factory=dict)
+    # Lowest eigenvalues of the real singlet stability matrix A + B (Eh); None if not run.
+    # Covers RHF -> RHF (internal) only; RHF -> UHF needs UKS (spec Stage 6).
+    stability_eigenvalues: npt.NDArray[np.float64] | None = None
+    orbitals_stable: bool | None = None
 
 
 def nuclear_repulsion(coords_bohr: npt.ArrayLike, charges: Sequence[float]) -> float:
@@ -65,6 +69,12 @@ def nuclear_repulsion(coords_bohr: npt.ArrayLike, charges: Sequence[float]) -> f
             e += z[i] * z[j] / float(np.linalg.norm(x[i] - x[j]))
     return e
 
+
+# Internal (real RHF -> RHF) stability: orbital-rotation step for the
+# finite-difference orbital-Hessian product, and the eigenvalue below which a
+# solution is called unstable (eigenvalues of A + B, Eh).
+STABILITY_STEP = 1e-4
+STABILITY_THRESHOLD = -1e-5
 
 # J/K gradient scales for the closed-shell (RKS) formulation, spec §8:
 # E_J = 2 E_J^bare(P), E_K = -E_K^bare(C_occ), P = C_occ C_occ^T.
@@ -102,6 +112,58 @@ def orthonormalize_guess(c_prev: Any, s: Any, n_occ: int) -> Any:
     if float(w.min()) < 1e-8:
         raise SCFError("guess orbitals are linearly dependent in the new metric")
     return c_occ @ (v / cupy.sqrt(w)) @ v.T
+
+
+def internal_stability(
+    c: Any,
+    eps: Any,
+    n_occ: int,
+    rank: int,
+    s: Any,
+    fock_of: Any,
+    *,
+    n_roots: int = 3,
+    step: float = STABILITY_STEP,
+) -> npt.NDArray[np.float64]:
+    """Lowest eigenvalues of the real singlet orbital Hessian A + B.
+
+    (A + B) u = (e_a - e_i) u + C_v^T [F(C_o + d C_v u) - F(C_o - d C_v u)] C_o / 2d,
+    with the rotated occupied orbitals Loewdin-orthonormalized in the S metric.
+    The difference captures every response term (J, K, XC kernel, PCM), so the
+    same code serves HF and every functional.
+    """
+    from saddle import _core
+
+    c_o = c[:, :n_occ]
+    c_v = c[:, n_occ:rank]
+    nv = int(c_v.shape[1])
+    if nv == 0:
+        return np.array([np.inf])
+    d_eps = eps[n_occ:rank][:, None] - eps[:n_occ][None, :]
+
+    def rotated(u: Any, sign: float) -> Any:
+        co = c_o + sign * step * (c_v @ u)
+        w, v = cupy.linalg.eigh(co.T @ s @ co)
+        return co @ (v / cupy.sqrt(w)) @ v.T
+
+    def matvec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        u = cupy.asarray(vec).reshape(nv, n_occ)
+        response = c_v.T @ (fock_of(rotated(u, 1.0)) - fock_of(rotated(u, -1.0))) @ c_o / (2 * step)
+        return np.asarray(cupy.asnumpy((d_eps * u + response).ravel()), dtype=np.float64)
+
+    roots = min(n_roots, nv * n_occ)
+    result = _core.davidson(
+        matvec,
+        nv * n_occ,
+        n_roots=roots,
+        tolerance=1e-6,
+        max_matvecs=80,
+        diagonal=np.asarray(cupy.asnumpy(d_eps.ravel()), dtype=np.float64),
+        guess=np.zeros((nv * n_occ, 0)),
+    )
+    if not result["converged"]:
+        raise SCFError("stability analysis did not converge")
+    return np.asarray(result["eigenvalues"], dtype=np.float64)
 
 
 class DIIS:
@@ -148,6 +210,7 @@ def rks(
     solvent: PCMModel | None = None,
     gradient: bool = False,
     guess: Any | None = None,
+    stability: bool = False,
     charge: int = 0,
     threshold_pq: float = 1e-14,
     orbital_gradient_tol: float = 1e-8,
@@ -229,6 +292,35 @@ def rks(
         else:
             eps, c = diagonalize(h)  # core guess
         e_nuc = nuclear_repulsion(xyz, z)
+
+        def build_fock(
+            c_occ: Any, q_guess: Any
+        ) -> tuple[Any, Any, float, float, float, float, Any]:
+            """Fock matrix, density and energy terms for doubly occupied orbitals."""
+            c_rows = cupy.ascontiguousarray(c_occ.T)
+            d = 2.0 * c_occ @ c_occ.T
+            j = df.coulomb(d)
+            k = df.exchange(c_rows) if needs_k else cupy.zeros_like(j)
+            fock = h + j - k
+            e_xc = e_nl = e_pcm = 0.0
+            q_out = q_guess
+            if xc is not None:
+                e_xc, vxc = xc.rks_potential(c_rows)
+                e_nl, vnl = xc.rks_nonlocal_potential(c_rows)
+                fock = fock + vxc + vnl
+            if pcm is not None:
+                pcm_result = pcm.potential(d, q_guess)  # raises PCMNotConverged
+                q_out = pcm_result.charges
+                e_pcm = pcm_result.energy
+                fock = fock + pcm_result.potential
+            e_elec = (
+                float(cupy.vdot(d, h) + 0.5 * cupy.vdot(d, j) - 0.5 * cupy.vdot(d, k))
+                + e_xc
+                + e_nl
+                + e_pcm
+            )
+            return fock, d, e_elec, e_xc, e_nl, e_pcm, q_out
+
         diis = DIIS()
         history: list[float] = []
         e_old = 0.0
@@ -238,27 +330,7 @@ def rks(
         e_xc = e_nl = 0.0
         for iteration in range(1, max_iterations + 1):
             iterations = iteration
-            c_occ = c[:, :n_occ]
-            c_rows = cupy.ascontiguousarray(c_occ.T)
-            d = 2.0 * c_occ @ c_occ.T
-            j = df.coulomb(d)
-            k = df.exchange(c_rows) if needs_k else cupy.zeros_like(j)
-            fock = h + j - k
-            if xc is not None:
-                e_xc, vxc = xc.rks_potential(c_rows)
-                e_nl, vnl = xc.rks_nonlocal_potential(c_rows)
-                fock = fock + vxc + vnl
-            if pcm is not None:
-                pcm_result = pcm.potential(d, q_pcm)  # raises PCMNotConverged
-                q_pcm = pcm_result.charges
-                e_pcm = pcm_result.energy
-                fock = fock + pcm_result.potential
-            e_elec = (
-                float(cupy.vdot(d, h) + 0.5 * cupy.vdot(d, j) - 0.5 * cupy.vdot(d, k))
-                + e_xc
-                + e_nl
-                + e_pcm
-            )
+            fock, d, e_elec, e_xc, e_nl, e_pcm, q_pcm = build_fock(c[:, :n_occ], q_pcm)
             err_o = x.T @ (fock @ d @ s - s @ d @ fock) @ x
             grad = float(cupy.abs(err_o).max())
             history.append(e_elec + e_nuc)
@@ -268,6 +340,15 @@ def rks(
             e_old = e_elec
             eps, c = diagonalize(diis.extrapolate(fock, err_o))
         eps, c = diagonalize(fock)
+        stab_eigs = None
+        stable = None
+        if stability:
+            if not converged:
+                raise SCFError("refusing to analyse stability of an unconverged SCF")
+            stab_eigs = internal_stability(
+                c, eps, n_occ, rank, s, lambda co: build_fock(co, q_pcm)[0]
+            )
+            stable = bool(stab_eigs[0] > STABILITY_THRESHOLD)
         grad_total = None
         terms: dict[str, npt.NDArray[np.float64]] = {}
         if gradient:
@@ -317,6 +398,8 @@ def rks(
             solvation_energy=e_pcm,
             gradient=grad_total,
             gradient_terms=terms,
+            stability_eigenvalues=stab_eigs,
+            orbitals_stable=stable,
             solvent=None if solvent is None else f"{solvent.method} eps={solvent.epsilon}",
         )
     finally:

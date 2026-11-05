@@ -3,6 +3,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/function.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
@@ -13,6 +14,7 @@
 #include <utility>
 
 #include "core/model.hpp"
+#include "hess/davidson.hpp"
 #include "hess/fd_hessian.hpp"
 #include "hess/noise.hpp"
 #include "hess/vibrations.hpp"
@@ -250,6 +252,28 @@ NB_MODULE(_core, m) {
       },
       "model"_a, "coords"_a, "direction"_a, "delta"_a = 1e-3, "order"_a = 6, "n_samples"_a = 16,
       "Line-scan gradient noise estimate; returns (epsilon Eh/bohr, gradients used).");
+
+  m.def(
+      "davidson",
+      [](const std::function<Eigen::VectorXd(const Eigen::VectorXd&)>& matvec, long dimension,
+         int n_roots, double tolerance, int max_matvecs, const Eigen::VectorXd& diagonal,
+         const Eigen::MatrixXd& guess) {
+        saddle::hess::DavidsonOptions o;
+        o.n_roots = n_roots;
+        o.tolerance = tolerance;
+        o.max_matvecs = max_matvecs;
+        const auto r = saddle::hess::davidson(matvec, dimension, o, diagonal, guess);
+        nb::dict d;
+        d["eigenvalues"] = r.eigenvalues;
+        d["eigenvectors"] = r.eigenvectors;
+        d["residual_norms"] = r.residual_norms;
+        d["n_matvecs"] = r.n_matvecs;
+        d["converged"] = r.converged;
+        return d;
+      },
+      "matvec"_a, "dimension"_a, "n_roots"_a = 1, "tolerance"_a = 1e-6, "max_matvecs"_a = 100,
+      "diagonal"_a = Eigen::VectorXd(), "guess"_a = Eigen::MatrixXd(),
+      "Lowest eigenpairs of a symmetric operator given only products (C++ Davidson).");
 
   m.def("optimal_step", &saddle::hess::optimal_step, "epsilon"_a, "fourth_derivative"_a,
         "Optimal central-difference step (3 eps / |fourth derivative|)^(1/3).");
