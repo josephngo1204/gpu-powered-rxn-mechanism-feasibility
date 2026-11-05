@@ -34,6 +34,7 @@ dependencies:
   - cupy
   # Cross-checks (spec section 10)
   - pyscf
+  - basis_set_exchange
   - pip
   - pip:
       - nvidia-cuest-cu12==0.2.2
