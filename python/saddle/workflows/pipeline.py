@@ -840,15 +840,18 @@ def _with_measured_grid_term(
     if not shifts:
         return a.uncertainty(c.uncertainty)
     measured = max(shifts)
+    note = f"max barrier shift under rotation/grid variants {measured:.3f}"
     stated = c.uncertainty.get("grid")
-    stated_value = stated.value_kcal_mol if stated is not None else None
     terms = dict(c.uncertainty)
-    terms["grid"] = Term(
-        "grid",
-        max(measured, stated_value or 0.0),
-        "measured",
-        f"max barrier shift under rotation/grid variants {measured:.3f}",
-    )
+    if (
+        stated is not None
+        and stated.value_kcal_mol is not None
+        and stated.value_kcal_mol > measured
+    ):
+        # The stated estimate stays the larger, so it is what the budget uses.
+        terms["grid"] = Term("grid", stated.value_kcal_mol, stated.source, f"{stated.note}; {note}")
+    else:
+        terms["grid"] = Term("grid", measured, "measured", note)
     return a.uncertainty(terms)
 
 
