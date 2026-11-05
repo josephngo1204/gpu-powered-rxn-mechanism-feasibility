@@ -47,8 +47,8 @@ allowed-confusables = ["σ"]  # scientific notation for uncertainty
 [tool.ruff.lint.per-file-ignores]
 # GPU tests import after pytest.importorskip(...), by design.
 "tests/**" = ["E402"]
-# HTML/CSS template strings; the Greek letters and minus signs are rendered output.
-"python/saddle/workflows/dashboard.py" = ["E501", "RUF001"]
+# HTML templates: long markup lines; Greek letters and minus signs are rendered output.
+"python/saddle/dashboard/*.py" = ["E501", "RUF001"]
 
 [tool.mypy]
 python_version = "3.12"

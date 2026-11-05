@@ -14,8 +14,8 @@ import yaml
 
 from saddle import _core
 from saddle.analysis.hessian_quality import assess_hessians
+from saddle.dashboard import Run, render_dashboard
 from saddle.store.results import read_result
-from saddle.workflows.dashboard import Run, render_dashboard
 from saddle.workflows.models import Model, build_model
 from saddle.workflows.pipeline import (
     FOURTH_DERIVATIVE_ESTIMATE,
@@ -147,7 +147,13 @@ def _find_runs(paths: Sequence[str]) -> list[Run]:
             raise CliError(f"{raw} is not a run directory")
     if not found:
         raise CliError("no campaign.json found under " + ", ".join(paths))
-    return [Run(label=d.name, doc=json.loads((d / "campaign.json").read_text())) for d in found]
+    # Label runs by directory name; when names repeat, by path so they stay distinct.
+    names = [d.name for d in found]
+    labels = [str(d) if names.count(d.name) > 1 else d.name for d in found]
+    return [
+        Run(label=label, doc=json.loads((d / "campaign.json").read_text()))
+        for label, d in zip(labels, found, strict=True)
+    ]
 
 
 def cmd_dashboard(args: argparse.Namespace) -> int:

@@ -57,7 +57,8 @@ gates G1–G8: stationarity, electronic quality, Hessian quality, saddle order, 
 connectivity, competition, and robustness. A barrier only gets a verdict when every gate passes.
 
 `saddle dashboard` writes one self-contained HTML file with no dependencies and no network
-access. It contains barrier-vs-limit plots with 2σ intervals, a gate matrix, energy profiles with
+access. It opens with a plain-language summary: one sentence per pathway, and each predicted
+half-life on a time axis against the target. It contains barrier-vs-limit plots with 2σ intervals, a gate matrix, energy profiles with
 reference overlays from `data/references.yaml`, uncertainty budgets, and robustness variants.
 It supports light and dark themes, and every chart also has a table view.
 
@@ -81,7 +82,8 @@ python/saddle/
   analysis/   thermochemistry, conformers, tunneling, KIE, kinetics, uncertainty, Hessian quality
   gates/      G1–G8 and the verdict engine
   store/      provenance, HDF5 results, SQLite task and stencil stores
-  workflows/  pipeline, markdown report, HTML dashboard
+  workflows/  campaign input, the pipeline (one function per stage), markdown report
+  dashboard/  HTML results dashboard: typed views, plain-language text, SVG charts
 campaigns/    reaction-ladder inputs (fake, smoke, c1, c2, c3)
 data/         literature references with citations
 results/mvp/  committed result summaries for the MVP (runs/ itself is not tracked)
