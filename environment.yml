@@ -1,5 +1,6 @@
-# CPU development environment for Saddle (Phases A-E).
-# GPU packages (CUDA toolkit, libcuest) are added once the CUDA version decision is made.
+# Development environment for Saddle.
+# GPU stack per docs/adr/0001: CUDA 12.8 runtime libraries (driver 570), CuPy,
+# and the cuEST Python bindings from pip (nvidia-cuest-cu12 0.2.2).
 name: saddle
 channels:
   - conda-forge
@@ -23,3 +24,16 @@ dependencies:
   - ruff
   - mypy
   - types-pyyaml
+  # GPU (CUDA 12.8; driver 570 cannot run CUDA 13)
+  - cuda-version=12.8
+  - libcublas
+  - libcusolver
+  - libcusparse
+  - cuda-nvrtc
+  - libnvjitlink
+  - cupy
+  # Cross-checks (spec section 10)
+  - pyscf
+  - pip
+  - pip:
+      - nvidia-cuest-cu12==0.2.2
