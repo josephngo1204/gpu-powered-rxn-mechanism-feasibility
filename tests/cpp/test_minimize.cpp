@@ -88,3 +88,38 @@ TEST(Bfgs, SatisfiesSecantCondition) {
   EXPECT_TRUE((h1 * s).isApprox(y, 1e-12));
   EXPECT_TRUE(h1.isApprox(h1.transpose(), 1e-14));
 }
+
+namespace {
+// A rotation-invariant surface plus a constant spurious torque, mimicking the
+// rotational non-invariance of a DFT integration grid.
+struct TorqueModel {
+  Springs inner;
+  double torque;
+  Evaluation evaluate(const Geometry& g, const WarmStart& w) {
+    Evaluation e = inner.evaluate(g, w);
+    Eigen::Vector3d com = Eigen::Vector3d::Zero();
+    const Eigen::Index n = g.dimension() / 3;
+    for (Eigen::Index i = 0; i < n; ++i) com += g.coords.segment<3>(3 * i);
+    com /= static_cast<double>(n);
+    for (Eigen::Index i = 0; i < n; ++i) {
+      const Eigen::Vector3d r = g.coords.segment<3>(3 * i) - com;
+      e.gradient.segment<3>(3 * i) += torque * Eigen::Vector3d::UnitZ().cross(r);
+    }
+    return e;
+  }
+};
+}  // namespace
+
+TEST(Minimize, SpuriousTorqueDoesNotBlockConvergence) {
+  TorqueModel model{Springs{{Spring{0, 1, 0.5, 1.8}, Spring{0, 2, 0.5, 1.8}, Spring{1, 2, 0.1, 2.9}}}, 1e-5};
+  Geometry g{{8, 1, 1}, Eigen::VectorXd(9)};
+  g.coords << 0.0, 0.0, 0.0, 1.6, 0.9, 0.1, -1.3, 1.2, -0.2;
+  OptimizerOptions opt;
+  opt.gtol_rms = 1e-8;
+  opt.gtol_max = 1.5e-8;
+  const auto r = minimize(model, g, opt);
+  ASSERT_TRUE(r.converged);
+  // The raw gradient still carries the torque; the internal gradient is converged.
+  EXPECT_GT(r.evaluation.gradient.norm(), 1e-6);
+  EXPECT_LE(rms(internal_gradient(r.geometry, r.evaluation.gradient)), 1e-8);
+}

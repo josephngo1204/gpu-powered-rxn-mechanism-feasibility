@@ -77,3 +77,9 @@ def test_unknown_radius_and_shape_errors() -> None:
         bond_graph(("Xe",), np.zeros(3), (1,))
     with pytest.raises(GraphError):
         bond_graph(SYMBOLS, REACTANT_COMPLEX[:-3], MAP)
+
+
+def test_dihydrogen_and_hydride_complex() -> None:
+    xyz = np.array([[-2.2, 0, 0], [0, 0, 0], [0.745, 0, 0]]) / units.BOHR_TO_ANGSTROM
+    g = bond_graph(("H", "H", "H"), xyz.ravel(), (1, 2, 3))
+    assert g == {frozenset((2, 3))}

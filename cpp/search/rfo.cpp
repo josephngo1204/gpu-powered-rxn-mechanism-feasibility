@@ -67,6 +67,11 @@ Eigen::MatrixXd internal_basis(const Geometry& geometry) {
   return q.rightCols(n - ext.cols());
 }
 
+Eigen::VectorXd internal_gradient(const Geometry& geometry, const Eigen::VectorXd& gradient) {
+  const Eigen::MatrixXd b = internal_basis(geometry);
+  return b * (b.transpose() * gradient);
+}
+
 RfoStep rs_rfo_minimize_step(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& gradient, double trust) {
   if (!(trust > 0.0)) throw std::invalid_argument("trust radius must be positive");
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (hessian + hessian.transpose()));

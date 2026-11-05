@@ -207,6 +207,7 @@ def rks(
     *,
     functional: str | None = None,
     grid: GridSpec | None = None,
+    nonlocal_grid: GridSpec | None = None,
     solvent: PCMModel | None = None,
     gradient: bool = False,
     guess: Any | None = None,
@@ -251,6 +252,13 @@ def rks(
             resources.append(mgrid)
             xc = XCIntPlan(handle, ao, mgrid, functional)
             resources.append(xc)
+            # VV10 on its own (usually coarser) grid, as in common practice (SG-1).
+            nl = xc
+            if xc.is_vv10 and nonlocal_grid is not None and nonlocal_grid != grid:
+                nl_grid = MolecularGrid(handle, symbols, xyz, nonlocal_grid)
+                resources.append(nl_grid)
+                nl = XCIntPlan(handle, ao, nl_grid, functional)
+                resources.append(nl)
             # cuEST reports omega = -1 when there is no long-range exchange.
             omega = xc.lrc_omega if xc.lrc_exchange_scale != 0.0 else 0.0
             fractions = (xc.exchange_scale, xc.lrc_exchange_scale, omega)
@@ -306,7 +314,7 @@ def rks(
             q_out = q_guess
             if xc is not None:
                 e_xc, vxc = xc.rks_potential(c_rows)
-                e_nl, vnl = xc.rks_nonlocal_potential(c_rows)
+                e_nl, vnl = nl.rks_nonlocal_potential(c_rows)
                 fock = fock + vxc + vnl
             if pcm is not None:
                 pcm_result = pcm.potential(d, q_guess)  # raises PCMNotConverged
@@ -374,7 +382,7 @@ def rks(
             if xc is not None:
                 terms["xc"] = cupy.asnumpy(xc.rks_gradient(c_rows))
                 if xc.is_vv10:
-                    terms["vv10"] = cupy.asnumpy(xc.rks_nonlocal_gradient(c_rows))
+                    terms["vv10"] = cupy.asnumpy(nl.rks_nonlocal_gradient(c_rows))
             if pcm is not None:
                 terms["pcm"] = cupy.asnumpy(pcm.gradient(d_tot, q_pcm))
             terms["nuclear_repulsion"] = nuclear_repulsion_gradient(xyz, z)

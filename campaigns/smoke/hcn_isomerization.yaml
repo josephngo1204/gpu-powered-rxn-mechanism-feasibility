@@ -1,0 +1,25 @@
+# Smoke campaign on real DFT: HCN -> HNC (gas phase, unimolecular).
+# Neutral, closed shell and well described by hybrid DFT; the barrier is far
+# above the 1 h feasibility limit, so the expected verdict is INFEASIBLE.
+schema_version: 1
+hypothesis: hcn_hypothesis.yaml
+model:
+  type: cuest
+  functional: WB97X-V
+  basis: def2-SVP
+  auxiliary_basis: def2-universal-jkfit
+  grid: "(99,590)"            # reference grid for Hessians (spec section 4)
+  math_mode: native-fp64
+pathways:
+  isomerization: {ts_guess: species/ts_hcn_hnc.xyz}
+symmetry_numbers: {hcn: 1, ts: 1}
+quasi_harmonic: true
+uncertainty:
+  grid: {value: 0.1, source: estimate, note: "(99,590); the G8 grid variant measures it"}
+  basis: {value: 1.5, source: estimate, note: "def2-SVP; no larger-basis check in a smoke run"}
+  method: {value: 2.0, source: estimate, note: "single hybrid functional"}
+  solvent: {value: 0.0, source: estimate, note: "gas phase"}
+robustness:
+  grid: {grid: "(150,974)"}
+  precision: {math_mode: default}
+  functional: {functional: M06-2X}

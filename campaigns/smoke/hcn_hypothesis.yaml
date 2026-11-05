@@ -1,0 +1,14 @@
+schema_version: 1
+id: smoke-hcn-hnc
+temperature_K: 298.15
+target_half_life_s: 3600
+solvent: null
+charge: 0
+multiplicity: 1
+reactants:
+  - {name: hcn, xyz: species/hcn.xyz, atom_map: [1, 2, 3]}
+pathways:
+  - name: isomerization
+    breaking: [[1, 2]]
+    forming: [[1, 3]]
+compare: [isomerization]

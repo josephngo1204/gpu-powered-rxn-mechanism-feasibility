@@ -45,7 +45,8 @@ class GateResult:
 class Evidence:
     """Everything the gates may inspect. Fields default to None (not collected)."""
 
-    gradient: FloatArray | None = None
+    gradient: FloatArray | None = None  # internal (TR-projected) gradient
+    raw_gradient: FloatArray | None = None
     scf_converged: bool | None = None
     orbitals_stable: bool | None = None
     uses_pcm: bool | None = None
@@ -88,6 +89,11 @@ def g1_stationarity(e: Evidence) -> GateResult:
     reason = (
         f"rms {rms:.2e}, max {gmax:.2e} Eh/bohr (limits {G1_RMS_GRADIENT:g}, {G1_MAX_GRADIENT:g})"
     )
+    # G1 is judged on the internal (TR-projected) gradient; a spurious DFT-grid
+    # torque is reported but does not count (user decision, tasks/plan.md).
+    if e.raw_gradient is not None:
+        spurious = float(np.max(np.abs(np.asarray(e.raw_gradient, dtype=np.float64) - g)))
+        reason += f"; translation/rotation part removed (max {spurious:.1e})"
     return GateResult(gate, name, ok, reason, None if ok else action)
 
 

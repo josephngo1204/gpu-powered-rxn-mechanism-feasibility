@@ -104,3 +104,8 @@ def test_gradient_requires_converged_scf() -> None:
             gradient=True,
             max_iterations=2,
         )
+
+
+@pytest.mark.slow
+def test_wb97x_v_gradient_with_separate_vv10_grid() -> None:
+    check(functional="WB97X-V", grid=GridSpec(75, 302), nonlocal_grid=GridSpec(50, 194))

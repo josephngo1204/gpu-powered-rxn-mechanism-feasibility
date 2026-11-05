@@ -10,7 +10,7 @@ from itertools import combinations
 import numpy as np
 import numpy.typing as npt
 
-from saddle import _core
+from saddle import _core, units
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -41,6 +41,8 @@ class Check:
     evaluated: bool = True
     required: bool = True
     detail: str = ""
+    # Reported but never decides pass/fail (rotational residual of a DFT grid).
+    informational: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,8 +53,9 @@ class QualityReport:
 
     @property
     def passed(self) -> bool:
-        return all(c.passed and c.evaluated for c in self.checks if c.required) and all(
-            c.passed for c in self.checks if c.evaluated
+        decisive = [c for c in self.checks if not c.informational]
+        return all(c.passed and c.evaluated for c in decisive if c.required) and all(
+            c.passed for c in decisive if c.evaluated
         )
 
     def summary(self) -> str:
@@ -61,8 +64,45 @@ class QualityReport:
             status = "PASS" if c.passed else "FAIL"
             if not c.evaluated:
                 status = "NOT EVALUATED" + ("" if c.required else " (optional)")
+            elif c.informational:
+                status = "INFO"
             lines.append(f"{c.name}: {status} value={c.value:.3g} target={c.target:.3g} {c.detail}")
         return "\n".join(lines)
+
+
+def external_residuals(
+    hessian: FloatArray, coords: FloatArray, masses: FloatArray
+) -> tuple[float, float]:
+    """Largest translational and rotational frequencies (cm^-1) of the unprojected Hessian.
+
+    Translations are exactly invariant for cuEST models (the grid moves with
+    the atoms); rotations are not for DFT, because integration grids are not
+    rotationally invariant (spec §6 "DFT grid: orientation dependence").
+    """
+    m = np.asarray(masses, dtype=np.float64)
+    x = np.asarray(coords, dtype=np.float64).reshape(-1, 3)
+    sq = np.repeat(np.sqrt(m), 3)
+    hmw = np.asarray(hessian) / np.outer(sq, sq)
+    r = x - (m[:, None] * x).sum(axis=0) / m.sum()
+    n = len(m)
+    t = np.zeros((3 * n, 3))
+    rot = np.zeros((3 * n, 3))
+    for i in range(n):
+        for a in range(3):
+            t[3 * i + a, a] = np.sqrt(m[i])
+            rot[3 * i : 3 * i + 3, a] = np.sqrt(m[i]) * np.cross(np.eye(3)[a], r[i])
+
+    def top(basis: FloatArray) -> float:
+        u, sv, _ = np.linalg.svd(basis, full_matrices=False)
+        keep = u[:, sv > 1e-8 * sv.max()] if sv.max() > 0 else u[:, :0]
+        if keep.shape[1] == 0:
+            return 0.0
+        w = np.linalg.eigvalsh(keep.T @ hmw @ keep)
+        return float(
+            np.sqrt(np.abs(w).max() / units.AMU_TO_ELECTRON_MASS) * units.HARTREE_TO_WAVENUMBER
+        )
+
+    return top(t), top(rot)
 
 
 def _spiky_columns(raw: FloatArray) -> list[int]:
@@ -100,7 +140,8 @@ def assess_hessians(
     masses = np.asarray(masses_amu, dtype=np.float64)
 
     asymmetry = 0.0
-    external = 0.0
+    translation = 0.0
+    rotation = 0.0
     flagged: set[int] = set()
     freqs: dict[float, FloatArray] = {}
     for step, raw in raw_by_step.items():
@@ -110,8 +151,11 @@ def assess_hessians(
         asymmetry = max(asymmetry, a)
         if a > t.max_asymmetry:
             flagged.update(_spiky_columns(raw))
-        vib = _core.analyze_vibrations(0.5 * (raw + raw.T), coords, masses)
-        external = max(external, float(vib.max_external_residual_cm))
+        sym = 0.5 * (raw + raw.T)
+        vib = _core.analyze_vibrations(sym, coords, masses)
+        t_res, r_res = external_residuals(sym, coords, masses)
+        translation = max(translation, t_res)
+        rotation = max(rotation, r_res)
         freqs[step] = np.asarray(vib.frequencies_cm)
 
     checks = [
@@ -124,10 +168,18 @@ def assess_hessians(
             detail=f"columns {sorted(flagged)}" if flagged else "",
         ),
         Check(
-            "external_residual",
-            external,
+            "translation_residual",
+            translation,
             t.max_external_residual_cm,
-            external <= t.max_external_residual_cm,
+            translation <= t.max_external_residual_cm,
+        ),
+        Check(
+            "rotation_residual",
+            rotation,
+            t.max_external_residual_cm,
+            rotation <= t.max_external_residual_cm,
+            informational=True,
+            detail="grid orientation error; judged by the G8 rotation test (user decision)",
         ),
     ]
 

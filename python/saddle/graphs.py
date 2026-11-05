@@ -15,7 +15,10 @@ import numpy.typing as npt
 from saddle import units
 from saddle.hypothesis import Pathway
 
-BOND_SCALE = 1.2
+# 1.2 x (r_i + r_j) misses H2 itself (0.744 A threshold vs a 0.74-0.75 A bond),
+# so 1.3 is used: H-H 0.81, C-H 1.39, C-C 1.98, C-Cl 2.31 A. Ion-dipole
+# contacts (~3 A) stay unbonded.
+BOND_SCALE = 1.3
 
 # Covalent radii in angstrom (Cordero 2008; sp3 carbon).
 COVALENT_RADIUS_ANGSTROM: dict[str, float] = {

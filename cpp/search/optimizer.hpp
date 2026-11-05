@@ -79,7 +79,7 @@ template <ElectronicModel Model>
   double trust = o.trust_radius;
 
   for (; r.iterations < o.max_iterations; ++r.iterations) {
-    if (gradient_converged(r.evaluation.gradient, o)) break;
+    if (gradient_converged(internal_gradient(r.geometry, r.evaluation.gradient), o)) break;
     const Eigen::MatrixXd basis = internal_basis(r.geometry);
     const RfoStep rfo = rs_rfo_minimize_step(basis.transpose() * h * basis,
                                              basis.transpose() * r.evaluation.gradient, trust);
@@ -94,12 +94,14 @@ template <ElectronicModel Model>
     const double actual = e.energy.value() - r.evaluation.energy.value();
     const double ratio = rfo.predicted_change != 0.0 ? actual / rfo.predicted_change : 1.0;
     trust = detail::update_trust(trust, ratio, step.norm(), o);
-    if (actual > 0.0 && !gradient_converged(e.gradient, o)) continue;  // reject uphill step
+    if (actual > 0.0 && !gradient_converged(internal_gradient(trial, e.gradient), o)) {
+      continue;  // reject uphill step
+    }
     r.geometry = std::move(trial);
     r.evaluation = std::move(e);
     r.energies.push_back(r.evaluation.energy.value());
   }
-  r.converged = gradient_converged(r.evaluation.gradient, o);
+  r.converged = gradient_converged(internal_gradient(r.geometry, r.evaluation.gradient), o);
   r.hessian = std::move(h);
   return r;
 }
@@ -151,7 +153,7 @@ template <ElectronicModel Model>
   };
 
   for (; r.iterations < o.max_iterations; ++r.iterations) {
-    if (gradient_converged(r.evaluation.gradient, o)) break;
+    if (gradient_converged(internal_gradient(r.geometry, r.evaluation.gradient), o)) break;
     const Eigen::MatrixXd basis = internal_basis(r.geometry);
     const Eigen::VectorXd g_r = basis.transpose() * r.evaluation.gradient;
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(basis.transpose() * h * basis);
@@ -184,7 +186,7 @@ template <ElectronicModel Model>
     r.evaluation = std::move(e);
     r.energies.push_back(r.evaluation.energy.value());
   }
-  r.converged = gradient_converged(r.evaluation.gradient, o);
+  r.converged = gradient_converged(internal_gradient(r.geometry, r.evaluation.gradient), o);
   r.hessian = std::move(h);
   r.followed_mode = tracked.size() != 0 ? Eigen::VectorXd(tracked.normalized()) : tracked;
   return r;

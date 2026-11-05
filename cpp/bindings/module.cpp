@@ -275,6 +275,15 @@ NB_MODULE(_core, m) {
       "diagonal"_a = Eigen::VectorXd(), "guess"_a = Eigen::MatrixXd(),
       "Lowest eigenpairs of a symmetric operator given only products (C++ Davidson).");
 
+  m.def(
+      "internal_gradient",
+      [](const Eigen::VectorXd& coords, const std::vector<int>& atomic_numbers,
+         const Eigen::VectorXd& gradient) {
+        return saddle::search::internal_gradient(make_geometry(coords, atomic_numbers), gradient);
+      },
+      "coords"_a, "atomic_numbers"_a, "gradient"_a,
+      "Gradient with translations and rotations projected out (B B^T g).");
+
   m.def("optimal_step", &saddle::hess::optimal_step, "epsilon"_a, "fourth_derivative"_a,
         "Optimal central-difference step (3 eps / |fourth derivative|)^(1/3).");
 

@@ -16,6 +16,11 @@ namespace saddle::search {
 // subspace. For geometries without atoms it is the identity.
 [[nodiscard]] Eigen::MatrixXd internal_basis(const Geometry& geometry);
 
+// Gradient with translations and rotations projected out (B B^T g). Convergence
+// is judged on it, so a spurious torque from a rotationally non-invariant DFT
+// grid cannot block convergence; the raw gradient is still reported.
+[[nodiscard]] Eigen::VectorXd internal_gradient(const Geometry& geometry, const Eigen::VectorXd& gradient);
+
 struct RfoStep {
   Eigen::VectorXd step;
   double predicted_change;  // g.s + 1/2 s.H.s

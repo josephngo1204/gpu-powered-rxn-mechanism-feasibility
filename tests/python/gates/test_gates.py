@@ -206,3 +206,10 @@ def test_missing_evidence_fails(gate, field) -> None:  # type: ignore[no-untyped
     r = gate(good().replace(**{field: None}))
     assert not r.passed
     assert "missing" in r.reason
+
+
+def test_g1_uses_internal_gradient_and_reports_removed_torque() -> None:
+    raw = np.full(18, 1e-6)
+    raw[0] += 3e-5  # spurious torque-like component removed by projection
+    r = G.g1_stationarity(good().replace(raw_gradient=raw))
+    assert r.passed and "removed" in r.reason

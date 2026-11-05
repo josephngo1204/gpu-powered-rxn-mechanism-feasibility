@@ -102,6 +102,9 @@ def davidson(matvec: Callable[[Annotated[NDArray[numpy.float64], dict(shape=(Non
     Lowest eigenpairs of a symmetric operator given only products (C++ Davidson).
     """
 
+def internal_gradient(coords: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], atomic_numbers: Sequence[int], gradient: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+    """Gradient with translations and rotations projected out (B B^T g)."""
+
 def optimal_step(epsilon: float, fourth_derivative: float) -> float:
     """Optimal central-difference step (3 eps / |fourth derivative|)^(1/3)."""
 

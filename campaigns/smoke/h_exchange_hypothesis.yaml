@@ -1,0 +1,15 @@
+schema_version: 1
+id: smoke-hydride-exchange
+temperature_K: 298.15
+target_half_life_s: 3600
+solvent: null
+charge: -1
+multiplicity: 1
+reactants:
+  - {name: hydride, xyz: species/hydride.xyz, atom_map: [1], charge: -1}
+  - {name: dihydrogen, xyz: species/h2.xyz, atom_map: [2, 3]}
+pathways:
+  - name: exchange
+    breaking: [[2, 3]]
+    forming: [[1, 2]]
+compare: [exchange]

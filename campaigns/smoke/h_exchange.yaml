@@ -1,0 +1,34 @@
+# Example of the pipeline rejecting a pathological DFT surface: H- + H2 exchange.
+#
+# Observed (wB97X-V/def2-SVPD, 2026-11-05): H-'s HOMO is +0.042 Eh, so the extra
+# electron is unbound and held only by the basis (self-interaction error). The
+# electronic "barrier" from separated reactants is -12.3 kcal/mol, the IRC
+# reaches a shallow H3- well 0.14 kcal/mol below the TS within 2 points, and the
+# run ends INCONCLUSIVE with G3 and G6 failing in every robustness variant.
+# Not used as a positive test; see campaigns/smoke/hcn_isomerization.yaml.
+# Small enough for an end-to-end GPU test of the bimolecular, single-atom-species
+# and diffuse-basis paths through the full pipeline. PBE0 is unsuitable here: its
+# delocalization error makes symmetric H3- a minimum (no exchange barrier),
+# while wB97X-V and M06-2X give a symmetric saddle.
+schema_version: 1
+hypothesis: h_exchange_hypothesis.yaml
+model:
+  type: cuest
+  functional: WB97X-V
+  basis: def2-SVPD
+  auxiliary_basis: def2-universal-jkfit
+  grid: "(75,302)"
+  math_mode: native-fp64
+pathways:
+  exchange: {ts_guess: species/ts_exchange.xyz}
+symmetry_numbers: {hydride: 1, dihydrogen: 2, ts: 2}
+quasi_harmonic: true
+uncertainty:
+  grid: {value: 0.1, source: estimate, note: "(75,302) vs finer grid; G8 checks it"}
+  basis: {value: 1.0, source: estimate, note: "def2-SVPD; no larger-basis check in a smoke run"}
+  method: {value: 2.0, source: estimate, note: "single hybrid functional for an anion"}
+  solvent: {value: 0.0, source: estimate, note: "gas phase"}
+robustness:
+  grid: {grid: "(99,590)"}
+  precision: {math_mode: default}
+  functional: {functional: M06-2X}

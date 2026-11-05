@@ -65,10 +65,30 @@ def test_column_spike_is_flagged() -> None:
     assert not _check(report, "column_spikes").passed
 
 
-def test_broken_translation_invariance_fails_external_residual() -> None:
+def test_broken_translation_invariance_fails_translation_residual() -> None:
     raw = _raw(1e-3) + 1e-3 * np.eye(9)
     report = assess_hessians({1e-3: raw}, COORDS, MASSES)
-    assert not _check(report, "external_residual").passed
+    assert not _check(report, "translation_residual").passed
+    assert not report.passed
+
+
+def test_rotational_noninvariance_is_reported_but_does_not_fail() -> None:
+    """A DFT grid breaks rotational invariance only (user decision: split TR check)."""
+    sq = np.repeat(np.sqrt(MASSES), 3)
+    x = COORDS.reshape(-1, 3)
+    r = x - (MASSES[:, None] * x).sum(0) / MASSES.sum()
+    rot = np.zeros((9, 3))
+    for i in range(3):
+        for a in range(3):
+            rot[3 * i : 3 * i + 3, a] = np.sqrt(MASSES[i]) * np.cross(np.eye(3)[a], r[i])
+    q, _ = np.linalg.qr(rot)
+    bump = 2e-6 * (q @ q.T)  # mass-weighted rotational curvature only
+    perturbed = {h: _raw(h) + np.outer(sq, sq) * bump for h in (1e-3, 2e-3)}
+    report = assess_hessians(perturbed, COORDS, MASSES)
+    assert _check(report, "translation_residual").passed
+    rot_check = _check(report, "rotation_residual")
+    assert rot_check.informational and rot_check.value > 5.0
+    assert report.passed, report.summary()
 
 
 def test_step_dependence_fails_frequency_stability() -> None:
