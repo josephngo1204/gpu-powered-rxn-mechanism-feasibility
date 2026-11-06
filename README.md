@@ -1,6 +1,6 @@
-# Saddle: GPU-accelerated reaction mechanism feasibility
+# A GPU-accelerated reaction mechanism feasibility engine
 
-Saddle takes a proposed reaction mechanism and decides, with quantified uncertainty, whether it can
+The pipeline takes a proposed reaction mechanism and decides, with quantified uncertainty, whether it can
 happen under given conditions. For each proposed step it:
 
 1. locates the transition state (TS) with quantum chemistry running on NVIDIA's cuEST GPU library,
