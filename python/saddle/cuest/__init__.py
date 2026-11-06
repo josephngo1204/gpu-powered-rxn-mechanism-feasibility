@@ -1,4 +1,4 @@
-"""Saddle's cuEST adapter: the only package that touches cuEST (ADR 0001)."""
+"""Saddle's cuEST adapter: the only package that touches cuEST."""
 
 from saddle.cuest.core import (
     AOShell,

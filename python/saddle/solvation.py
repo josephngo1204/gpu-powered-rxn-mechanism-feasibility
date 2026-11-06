@@ -1,4 +1,4 @@
-"""Implicit-solvent (PCM) model settings (spec §4: solvent "as hypothesized").
+"""Implicit-solvent (PCM) model settings (solvent "as hypothesized").
 
 Surface discretization: SwiG (A. W. Lange and J. M. Herbert, J. Chem. Phys.
 133, 244111 (2010)), done inside cuEST. Gaussian widths zeta for each Lebedev
@@ -8,9 +8,9 @@ Cavity radii: Bondi van der Waals radii (A. Bondi, J. Phys. Chem. 68, 441
 (1964)) with H = 1.1 A (R. S. Rowland and R. Taylor, J. Phys. Chem. 100, 7384
 (1996)), scaled by 1.2 (Q-Chem and PySCF default).
 
-PCM is electrostatic only here; spec §3 and §12 forbid treating it as proof
+PCM is electrostatic only here and is not treated as evidence
 of explicit solvent behaviour, and non-electrostatic terms remain an open
-question (spec §16).
+question.
 """
 
 from collections.abc import Sequence

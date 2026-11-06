@@ -1,9 +1,9 @@
-"""Spec §11 negative controls on fake surfaces.
+"""Negative controls on fake surfaces.
 
 Each control is a convincing wrong answer that must be rejected for the
 stated reason. Controls that need real electronic structure (PCM
 non-convergence, rotated structure on a coarse grid) use evidence-level
-stand-ins here and are repeated with cuEST in Phase F.
+stand-ins here and are repeated with cuEST in test_molecular_controls.py.
 """
 
 import dataclasses
@@ -19,9 +19,6 @@ from saddle.gates.verdict import PathwayOutcome, Verdict, decide, rank_pair
 
 FloatArray = npt.NDArray[np.float64]
 
-# Collinear A(0)-H(1)-C(2) hydrogen transfer at the spring rest geometry (bohr).
-# The antisymmetric H motion is the only negative direction when the A...C
-# spring holds the symmetric stretch: k_AH + k_HC + 4 k_AC > 0.
 COORDS = np.array([0.0, 0.0, 0.0, 2.5, 0.0, 0.0, 5.0, 0.0, 0.0])
 MASSES = np.array([12.0, 1.00782503223, 12.0])
 MAP = (1, 2, 3)
@@ -78,7 +75,6 @@ def evidence_for(model: _core.Springs, coords: FloatArray = COORDS) -> G.Evidenc
     )
 
 
-# H transfer from A to C: A-H breaks, H-C forms, A...C holds the frame.
 TRUE_TS = springs(-0.06, -0.06, 0.4)
 
 
@@ -93,7 +89,6 @@ def test_positive_control_true_ts_passes_every_gate() -> None:
 
 
 def test_second_order_saddle_fails_g4() -> None:
-    # A repulsive A...C term makes the symmetric stretch a second negative direction.
     e = evidence_for(springs(-0.06, -0.06, -0.2))
     assert "G4" in failed(e)
     assert "second-order" in G.g4_saddle_order(e).reason
@@ -101,14 +96,14 @@ def test_second_order_saddle_fails_g4() -> None:
 
 def test_near_stationary_geometry_with_residual_force_fails_g1() -> None:
     displaced = COORDS.copy()
-    displaced[3] += 2e-3  # H off the saddle point along the transfer coordinate
+    displaced[3] += 2e-3
     e = evidence_for(TRUE_TS, displaced)
     assert failed(e)[0] == "G1"
 
 
 def test_wrong_products_fail_g6() -> None:
     e = evidence_for(TRUE_TS)
-    e = e.replace(irc_forward_graph=e.reactant_graph)  # IRC returns to reactants both ways
+    e = e.replace(irc_forward_graph=e.reactant_graph)
     assert failed(e) == ["G6"]
 
 

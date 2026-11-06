@@ -34,13 +34,12 @@ std::uint64_t splitmix64(std::uint64_t x) {
 }
 
 double to_unit_interval(std::uint64_t x) {
-  // (0, 1], never zero so log() is finite.
   return (static_cast<double>(x >> 11) + 1.0) * 0x1.0p-53;
 }
 
-}  // namespace
+}
 
-Evaluation MullerBrown::evaluate(const Geometry& geometry, const WarmStart& /*guess*/) const {
+Evaluation MullerBrown::evaluate(const Geometry& geometry, const WarmStart& ) const {
   require_dimension(geometry, 2, "MullerBrown");
   const double x = geometry.coords[0];
   const double y = geometry.coords[1];
@@ -64,7 +63,7 @@ Morse::Morse(double depth, double alpha, double r_eq) : depth_(depth), alpha_(al
   }
 }
 
-Evaluation Morse::evaluate(const Geometry& geometry, const WarmStart& /*guess*/) const {
+Evaluation Morse::evaluate(const Geometry& geometry, const WarmStart& ) const {
   require_dimension(geometry, 6, "Morse");
   const Eigen::Vector3d d = geometry.coords.segment<3>(3) - geometry.coords.segment<3>(0);
   const double r = d.norm();
@@ -88,7 +87,7 @@ Harmonic::Harmonic(Eigen::VectorXd center, Eigen::MatrixXd force_constants)
   }
 }
 
-Evaluation Harmonic::evaluate(const Geometry& geometry, const WarmStart& /*guess*/) const {
+Evaluation Harmonic::evaluate(const Geometry& geometry, const WarmStart& ) const {
   require_dimension(geometry, x0_.size(), "Harmonic");
   const Eigen::VectorXd dx = geometry.coords - x0_;
   const Eigen::VectorXd g = k_ * dx;
@@ -104,7 +103,7 @@ Springs::Springs(std::vector<Spring> springs) : springs_(std::move(springs)) {
   }
 }
 
-Evaluation Springs::evaluate(const Geometry& geometry, const WarmStart& /*guess*/) const {
+Evaluation Springs::evaluate(const Geometry& geometry, const WarmStart& ) const {
   if (geometry.dimension() < 3 * n_atoms_ || geometry.dimension() % 3 != 0) {
     throw ShapeError("Springs: geometry has too few Cartesian coordinates");
   }
@@ -172,6 +171,6 @@ Eigen::VectorXd geometry_noise(const Eigen::VectorXd& coords, double amplitude,
   return noise;
 }
 
-}  // namespace detail
+}
 
-}  // namespace saddle::surfaces
+}

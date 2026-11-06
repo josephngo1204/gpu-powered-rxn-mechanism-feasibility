@@ -1,9 +1,9 @@
 """Density fitting of range-separated exchange differs between cuEST and PySCF.
 
-Spec §11: "Treat DF and range-separated conventions as explicit test variables."
+DF and range-separated conventions are treated as explicit test variables.
 On one fixed density, full-range DF exchange agrees with PySCF to 1e-10, while
 long-range (erf) DF exchange differs from both PySCF DF and exact exchange by
-about 1e-4. See docs/adr/0003.
+about 1e-4.
 """
 
 import numpy as np
@@ -84,6 +84,5 @@ def test_full_range_df_exchange_matches_pyscf(exchange_energies: dict[str, float
 def test_long_range_df_exchange_convention_differs(exchange_energies: dict[str, float]) -> None:
     e = exchange_energies
     gap = e["cuest_df_lr"] - e["exact_lr"]
-    # PySCF fits the erf operator almost exactly; cuEST's DF carries ~1e-4.
     assert abs(e["pyscf_df_lr"] - e["exact_lr"]) < 1e-7
     assert 5e-5 < abs(gap) < 2e-4

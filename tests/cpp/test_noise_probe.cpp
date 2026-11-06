@@ -43,7 +43,6 @@ TEST(NoiseProbe, RejectsBadArguments) {
   EXPECT_THROW((void)probe_noise(mb, g, kDirection, 1e-3, 6, 6), std::invalid_argument);
 }
 
-// Spec §6 design table, |E''''| = 2 Eh/bohr^4, 12 amu.
 struct TableRow {
   double eps, h_opt, dk, freq;
 };

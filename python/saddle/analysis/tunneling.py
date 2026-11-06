@@ -1,4 +1,4 @@
-"""Tunneling corrections, reported separately and never folded in silently (spec §4).
+"""Tunneling corrections, reported separately and never folded in silently.
 
 Wigner: kappa = 1 + (h nu / kT)^2 / 24.
 
@@ -55,7 +55,6 @@ def _log_eckart_transmission(
     big_a = 2.0 * math.sqrt(a1 * xi) / denom
     big_b = 2.0 * math.sqrt((xi - 1.0) * a1 + a2) / denom
     s = big_a + big_b
-    # P = 2 sinh A sinh B / (cosh(A+B) + cosh D); divide through by e^(A+B)/2.
     log_num = math.log(-math.expm1(-2.0 * big_a)) + math.log(-math.expm1(-2.0 * big_b))
     d_sq = a1 * a2 - math.pi**2 / 4.0
     if d_sq >= 0.0:

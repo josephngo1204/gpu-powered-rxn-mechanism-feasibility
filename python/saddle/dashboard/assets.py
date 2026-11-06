@@ -128,7 +128,6 @@ summary { cursor: pointer; color: var(--text-secondary); font-size: 12px }
   border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer }
 """
 
-# The OS setting picks the theme unless the toggle stamped data-theme on <html>.
 CSS = (
     f".viz-root{{color-scheme:light;{_tokens(LIGHT)}}}\n"
     '@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root'
@@ -136,8 +135,6 @@ CSS = (
     f':root[data-theme="dark"] .viz-root{{color-scheme:dark;{_tokens(DARK)}}}\n' + _RULES
 )
 
-# Tooltip that follows the pointer (replacing native <title> pop-ups), and the
-# theme toggle. Tooltip text is set with textContent, never as HTML.
 JS = """
 (() => {
   const tip = document.getElementById('tip');

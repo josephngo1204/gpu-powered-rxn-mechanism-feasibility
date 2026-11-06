@@ -1,4 +1,4 @@
-"""End-to-end feasibility pipeline (spec §4 "Pipeline").
+"""End-to-end feasibility pipeline.
 
 hypothesis -> reactant minimum -> RS-P-RFO saddle -> noise probe -> step
 -> restartable Hessians at h and 2h -> quality -> vibrations -> IRC ->
@@ -6,7 +6,7 @@ graph match -> thermochemistry -> gates -> robustness -> verdict -> results
 
 Separated reactants are minimized and treated species by species, so a
 bimolecular barrier is measured from separated reactants with the per-species
-standard-state term (spec §4). Fake surfaces describe only the whole system,
+standard-state term. Fake surfaces describe only the whole system,
 so they support single-species reactants; cuEST models evaluate fragments.
 
 Reading order: ``run_campaign`` (top level) -> ``_run_variant`` (one model)
@@ -52,32 +52,19 @@ from saddle.workflows.models import Model, ModelError, ModelProvider, build_prov
 
 FloatArray = npt.NDArray[np.float64]
 
-# Spec §6 design estimate of |E''''| used to choose the FD step.
 FOURTH_DERIVATIVE_ESTIMATE = 2.0
-# Below this the probe cannot resolve noise (clean analytic surfaces).
 NOISE_RESOLUTION_FLOOR = 1e-10
 MIN_STEP, MAX_STEP = 1e-4, 2e-2
-# FD step for reactant-species Hessians (bohr); their noise is not probed.
 SPECIES_STEP = 1e-3
-# Reference-level refinement before a Hessian (spec §6 "Residual force"). At
-# the G1 limit (|g| ~ 1e-5) the residual force alone gives ~14 cm^-1 of
-# rotation-vibration mixing for hydrogen, above the 5 cm^-1 target.
-# PROPOSED value (spec gives none); see docs/adr/0002.
 REFERENCE_GTOL_RMS = 1e-7
 REFERENCE_GTOL_MAX = 1.5e-7
-# SCF orbital-gradient threshold for Hessian stencil gradients. At the 1e-8
-# reference threshold, SCF incompleteness acts as ~2e-9 Eh/bohr gradient noise
-# across stencil points (seen in the 1/h growth of the sum-rule error), which
-# the line-scan probe misses because the error varies smoothly along a
-# warm-started line. PROPOSED value; see docs/adr/0002.
 HESSIAN_ORBITAL_GRADIENT = 1e-10
 IRC_STEP = 0.05
 IRC_MAX_POINTS = 300
 IRC_SWITCH_GRADIENT = 1e-3
 ROTATION_SEED = 20261105
-
-
-# --------------------------------------------------------------------------- results
+MODEL_FAILURES = (SCFError, PCMNotConverged, ModelError)
+VARIANT_FAILED = "FAILED"
 
 
 @dataclass
@@ -151,7 +138,6 @@ class PathwayAnalysis:
     completed: bool = True
     saddle_found: bool = True
     electronic_barrier_kcal_mol: float | None = None
-    # Electronic energies of the IRC endpoint minima relative to separated reactants.
     endpoint_minima_kcal_mol: dict[str, float] = field(default_factory=dict)
 
     def uncertainty(self, campaign_terms: Mapping[str, Term]) -> UncertaintyBudget:
@@ -182,9 +168,6 @@ class CampaignResult:
     verdicts: dict[str, Any]
     summary: dict[str, Any]
     out_dir: Path
-
-
-# --------------------------------------------------------------------------- helpers
 
 
 def _model_fingerprint(spec: Mapping[str, Any], variant: str) -> str:
@@ -342,7 +325,7 @@ def _refined(
     """Two-stage search: converge to G1, then restart with a fresh exact Hessian.
 
     BFGS/Bofill updates underestimate soft modes and converge only linearly,
-    so tightening to the reference threshold (spec §6 "Residual force") is
+    so tightening to the reference threshold is
     done by a Newton-RFO restart from the G1 geometry, which converges
     quadratically. The second stage starts with an exact FD Hessian.
     """
@@ -356,10 +339,6 @@ def _refined(
         **{k: v for k, v in kw.items() if k not in ("gtol_rms", "gtol_max")},
     )
 
-    # The refinement must never be worse than its starting point. A DFT grid
-    # leaves a spurious torque (~1e-6 at (99,590)) that internal steps cannot
-    # remove; when stage 2 cannot reach the reference threshold it may wander,
-    # so the stage with the smaller gradient is kept and the shortfall noted.
     def rms(r: Mapping[str, Any]) -> float:
         g = np.asarray(r["gradient"])
         return float(np.sqrt(np.mean(g**2)))
@@ -406,15 +385,12 @@ def _minimum(
     return _with_thermo(point, c, atoms, freqs, symmetry), bool(r["converged"])
 
 
-# --------------------------------------------------------------------------- one pathway
-
-
 def _competitors(c: Campaign, p: Pathway) -> tuple[str, ...]:
     return tuple(n for n in c.hypothesis.compare if n != p.name)
 
 
 def _failed_search(c: Campaign, p: Pathway, exc: Exception, n_gradients: int) -> PathwayAnalysis:
-    """The search budget was spent without a valid saddle (spec §5)."""
+    """The search budget was spent without a valid saddle."""
     evidence = G.Evidence(declared_competitors=_competitors(c, p))
     if isinstance(exc, PCMNotConverged):
         evidence = evidence.replace(
@@ -439,6 +415,32 @@ def _failed_search(c: Campaign, p: Pathway, exc: Exception, n_gradients: int) ->
     )
 
 
+def _failed_characterization(
+    c: Campaign, p: Pathway, x: FloatArray, exc: Exception, n_gradients: int, notes: list[str]
+) -> PathwayAnalysis:
+    """A saddle was found but the model failed while characterizing it.
+
+    The evidence the gates need is missing, so they fail and the pathway is
+    inconclusive rather than the whole campaign stopping.
+    """
+    return PathwayAnalysis(
+        pathway=p,
+        evidence=G.Evidence(coords_bohr=x, declared_competitors=_competitors(c, p)),
+        ts=None,
+        barrier_kcal_mol=None,
+        barrier_by_step={},
+        numerical_sigma=None,
+        thermo_sigma=None,
+        noise_epsilon=float("nan"),
+        noise_floor_cm=float("nan"),
+        step=float("nan"),
+        tunneling={},
+        irc={},
+        notes=[*notes, f"TS characterization failed: {exc}"],
+        n_gradients=n_gradients,
+    )
+
+
 def _search_notes(ts_run: Mapping[str, Any]) -> list[str]:
     notes = []
     if not ts_run.get("refined", True):
@@ -455,7 +457,7 @@ def _search_notes(ts_run: Mapping[str, Any]) -> list[str]:
 class _FDStep:
     """Measured gradient noise and the finite-difference step chosen from it."""
 
-    epsilon: float  # as probed (may be below resolution)
+    epsilon: float
     step: float
     noise_floor_cm: float
     note: str | None
@@ -588,6 +590,18 @@ def _stage_barrier(
     return _Barrier(barrier, by_step, numerical_sigma, thermo_sigma)
 
 
+def _minimum_at_endpoint(
+    model: Model,
+    c: Campaign,
+    coords: FloatArray,
+    h: float,
+    store: StencilStore,
+    settings: str,
+) -> StationaryPoint:
+    """The minimum an IRC branch leads to, with ZPE for the Eckart barriers."""
+    return _minimum(model, c, c.system, coords, h, store, settings, 1)[0]
+
+
 def _stage_tunneling(
     c: Campaign,
     model: Model,
@@ -614,7 +628,7 @@ def _stage_tunneling(
     }
     if None not in side_branch.values() and ts.thermo_qh is not None:
         minima = {
-            side: _minimum(model, c, c.system, endpoints[branch], h, store, settings, 1)[0]
+            side: _minimum_at_endpoint(model, c, endpoints[branch], h, store, settings)
             for side, branch in side_branch.items()
             if branch is not None
         }
@@ -660,20 +674,23 @@ def analyze_pathway(
     x = np.asarray(ts_run["coords"])
     notes = _search_notes(ts_run)
 
-    fd = _stage_fd_step(counter, x, np.asarray(ts_run["followed_mode"]), float(c.masses.min()))
+    try:
+        fd = _stage_fd_step(counter, x, np.asarray(ts_run["followed_mode"]), float(c.masses.min()))
+        h = fd.step
+        raws = {
+            h: _hessian(counter, c.system, x, h, store, settings),
+            2 * h: _hessian(counter, c.system, x, 2 * h, store, settings),
+        }
+        energy, gradient = counter.evaluate(x)
+        g2 = provider.g2_evidence(model, x)
+    except MODEL_FAILURES as exc:
+        return _failed_characterization(c, p, x, exc, counter.calls, notes)
     if fd.note:
         notes.append(fd.note)
-    h = fd.step
-    raws = {
-        h: _hessian(counter, c.system, x, h, store, settings),
-        2 * h: _hessian(counter, c.system, x, 2 * h, store, settings),
-    }
     quality = assess_hessians(raws, x, c.masses, noise_floor_cm=fd.noise_floor_cm)
     hess = 0.5 * (raws[h] + raws[h].T)
     vib = _core.analyze_vibrations(hess, x, c.masses)
     freqs = np.asarray(vib.frequencies_cm)
-    energy, gradient = counter.evaluate(x)
-    g2 = provider.g2_evidence(model, x)
     if g2.get("note"):
         notes.append(f"G2: {g2['note']}")
     reactant_graph = reactant.graph(c)
@@ -685,10 +702,14 @@ def analyze_pathway(
     endpoints: dict[str, FloatArray] = {}
     if G.g4_saddle_order(evidence).passed:
         product_graph = expected_products(reactant_graph, p)
-        irc, endpoints, graphs = _stage_irc(c, counter, x, hess, reactant_graph, product_graph)
-        evidence = evidence.replace(
-            irc_forward_graph=graphs["forward"], irc_reverse_graph=graphs["reverse"]
-        )
+        try:
+            irc, endpoints, graphs = _stage_irc(c, counter, x, hess, reactant_graph, product_graph)
+        except MODEL_FAILURES as exc:
+            notes.append(f"IRC failed: {exc}")
+        else:
+            evidence = evidence.replace(
+                irc_forward_graph=graphs["forward"], irc_reverse_graph=graphs["reverse"]
+            )
     else:
         notes.append("IRC skipped: G4 failed")
 
@@ -706,9 +727,15 @@ def analyze_pathway(
     tun: dict[str, Any] = {}
     endpoint_minima: dict[str, float] = {}
     if imag.size == 1:
-        tun, endpoint_minima = _stage_tunneling(
-            c, counter, float(imag[0]), ts, irc, endpoints, h, store, settings, reactant
-        )
+        try:
+            tun, endpoint_minima = _stage_tunneling(
+                c, counter, float(imag[0]), ts, irc, endpoints, h, store, settings, reactant
+            )
+        except MODEL_FAILURES as exc:
+            tun = {
+                "wigner": tunneling.wigner(float(imag[0]), c.hypothesis.temperature_k),
+                "eckart_note": f"Eckart not computed: endpoint minimization failed: {exc}",
+            }
 
     return PathwayAnalysis(
         pathway=p,
@@ -730,9 +757,6 @@ def analyze_pathway(
     )
 
 
-# --------------------------------------------------------------------------- one model
-
-
 def _run_variant(
     c: Campaign,
     name: str,
@@ -745,7 +769,7 @@ def _run_variant(
 
     ``starts`` replaces the campaign TS guesses (variants restart from the
     baseline TSs). A ``rotation_seed`` in the variant rigidly rotates every
-    input geometry (spec §6 rotation test). Returns the reactants, the
+    input geometry. Returns the reactants, the
     analyses and the model's self-description.
     """
     settings_overrides = dict(variant or {})
@@ -848,7 +872,6 @@ def _with_measured_grid_term(
         and stated.value_kcal_mol is not None
         and stated.value_kcal_mol > measured
     ):
-        # The stated estimate stays the larger, so it is what the budget uses.
         terms["grid"] = Term("grid", stated.value_kcal_mol, stated.source, f"{stated.note}; {note}")
     else:
         terms["grid"] = Term("grid", measured, "measured", note)
@@ -921,9 +944,6 @@ def _pathway_summary(
     }
 
 
-# --------------------------------------------------------------------------- campaign
-
-
 def run_campaign(
     path: str | Path, out_dir: str | Path, *, overwrite: bool = False
 ) -> CampaignResult:
@@ -939,30 +959,42 @@ def run_campaign(
         raise CampaignError(f"{summary_path} exists; pass overwrite=True to replace it")
     out.mkdir(parents=True, exist_ok=True)
     store = StencilStore(out / "stencils.sqlite")
+    try:
+        return _execute_campaign(c, out, store, overwrite=overwrite)
+    finally:
+        store.close()
+
+
+def _execute_campaign(
+    c: Campaign, out: Path, store: StencilStore, *, overwrite: bool
+) -> CampaignResult:
+    """Baseline, robustness variants, final verdicts and result files for one campaign."""
+    summary_path = out / "campaign.json"
     env = collect_environment()
     limit = barrier_limit_kcal_mol(c.hypothesis.temperature_k, c.hypothesis.target_half_life_s)
 
-    # 1. Baseline model: every pathway, then verdicts from G1-G7.
     reactant, analyses, described = _run_variant(c, "baseline", None, None, store, env)
     evaluated = {n: a.completed for n, a in analyses.items()}
     baseline = _preliminary_verdicts(analyses, c.uncertainty, evaluated, limit)
 
-    # 2. Robustness: rerun from the baseline TS geometries with each variant model.
     starts = {n: a.ts.coords for n, a in analyses.items() if a.ts is not None}
     robustness = dict(c.robustness)
     if _is_dft(c.model_spec):
-        # DFT grids are not rotationally invariant; G8 includes a rotation test.
         robustness.setdefault("rotation", {"rotation_seed": ROTATION_SEED})
     variants: dict[str, dict[str, VariantOutcome]] = {n: {} for n in analyses}
     for vname, vspec in robustness.items():
-        _, va, _ = _run_variant(c, vname, vspec, starts, store, env)
+        try:
+            _, va, _ = _run_variant(c, vname, vspec, starts, store, env)
+        except (*MODEL_FAILURES, CampaignError) as exc:
+            for n in analyses:
+                variants[n][vname] = VariantOutcome(VARIANT_FAILED, None, f"variant failed: {exc}")
+            continue
         vd = _preliminary_verdicts(va, c.uncertainty, evaluated, limit)
         for n in analyses:
             variants[n][vname] = VariantOutcome(
                 vd[n].verdict.value, va[n].barrier_kcal_mol, vd[n].reason
             )
 
-    # 3. Final gates (now including G8), measured sigma_grid, verdicts, rankings.
     final_gates: dict[str, list[G.GateResult]] = {}
     for n, a in analyses.items():
         a.evidence = a.evidence.replace(
@@ -974,7 +1006,6 @@ def run_campaign(
     outcomes = {n: _outcome(a, final_gates[n], budgets[n]) for n, a in analyses.items()}
     verdicts = decide(list(outcomes.values()), limit)
 
-    # 4. Write results: one HDF5 per TS and the campaign summary.
     pathway_summaries: dict[str, Any] = {}
     for n, a in analyses.items():
         summary = _pathway_summary(
@@ -1010,7 +1041,6 @@ def run_campaign(
     summary_path.write_text(
         json.dumps(campaign_summary, indent=2, sort_keys=True, allow_nan=False) + "\n"
     )
-    store.close()
     return CampaignResult(
         c, limit, analyses, {n: v.verdict for n, v in verdicts.items()}, campaign_summary, out
     )

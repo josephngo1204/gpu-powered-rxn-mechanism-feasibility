@@ -77,7 +77,7 @@ def test_electron_count_and_aufbau(water) -> None:  # type: ignore[no-untyped-de
         ao.close()
     assert float(cupy.vdot(water.density, s)) == pytest.approx(10.0, abs=1e-10)
     eps = water.orbital_energies
-    assert eps[4] < 0 < eps[5]  # HOMO bound, LUMO above
+    assert eps[4] < 0 < eps[5]
 
 
 def test_odd_electron_count_is_rejected() -> None:

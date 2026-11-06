@@ -1,7 +1,7 @@
 """Electronic-structure model factory for campaigns.
 
-Fake surfaces come from the C++ core. Real cuEST models arrive in Phase F
-and plug in through the same evaluate(coords) -> (energy, gradient) protocol.
+Fake surfaces come from the C++ core. Real cuEST models plug in through the same
+evaluate(coords) -> (energy, gradient) protocol.
 """
 
 import dataclasses
@@ -13,7 +13,7 @@ import numpy as np
 import numpy.typing as npt
 
 from saddle import _core
-from saddle.errors import PCMNotConverged
+from saddle.errors import PCMNotConverged, SCFError, StabilityNotConverged
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -77,9 +77,6 @@ def build_model(spec: Mapping[str, Any], variant: Mapping[str, Any] | None = Non
     if noise is not None:
         model = NoisyModel(model, float(noise), seed=int(variant.get("seed", 0)))
     return model
-
-
-# --- Model providers: whole-system and per-fragment models with G2 evidence ---
 
 
 @dataclasses.dataclass(frozen=True)
@@ -150,7 +147,7 @@ class FakeProvider(ModelProvider):
 
 
 class CuestProvider(ModelProvider):
-    """Real DFT/HF through saddle.scf.model.CuestModel (ADR 0001)."""
+    """Real DFT/HF through saddle.scf.model.CuestModel."""
 
     kind = "cuest"
 
@@ -216,11 +213,17 @@ class CuestProvider(ModelProvider):
         return d
 
     def g2_evidence(self, model: Model, coords: FloatArray) -> dict[str, Any]:
+        """Rerun the SCF at the TS with an internal stability analysis.
+
+        Failures become G2 evidence: an unconverged SCF fails G2, and a
+        stability solver that does not converge leaves stability unknown,
+        which G2 treats as missing evidence.
+        """
         uses_pcm = self.level.solvent is not None
+        pcm = {"uses_pcm": uses_pcm, "pcm_converged": True if uses_pcm else None}
         try:
             r = model.run(coords, gradient=False, stability=True)  # type: ignore[attr-defined]
         except PCMNotConverged as exc:
-            # Spec §12: check every PCM convergence flag; G2 rejects, never a silent pass.
             return {
                 "scf_converged": False,
                 "orbitals_stable": False,
@@ -228,13 +231,24 @@ class CuestProvider(ModelProvider):
                 "pcm_converged": False,
                 "note": f"PCM not converged at the TS: {exc}",
             }
-        history = model.history  # type: ignore[attr-defined]
+        except StabilityNotConverged as exc:
+            return {
+                **pcm,
+                "scf_converged": True,
+                "orbitals_stable": None,
+                "note": f"stability analysis failed at the TS: {exc}",
+            }
+        except SCFError as exc:
+            return {
+                **pcm,
+                "scf_converged": False,
+                "orbitals_stable": None,
+                "note": f"SCF failed at the TS: {exc}",
+            }
         return {
-            "scf_converged": all(h.converged for h in history),
+            **pcm,
+            "scf_converged": bool(r.converged),
             "orbitals_stable": r.orbitals_stable,
-            "uses_pcm": uses_pcm,
-            # PCMIntPlan raises on non-convergence, so a finished run converged.
-            "pcm_converged": True if uses_pcm else None,
             "note": (
                 f"internal RHF->RHF stability, lowest A+B eigenvalue "
                 f"{float(r.stability_eigenvalues[0]):.4f} Eh; RHF->UHF not tested"

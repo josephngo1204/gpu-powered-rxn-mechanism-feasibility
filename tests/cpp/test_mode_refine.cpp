@@ -38,7 +38,7 @@ double error(Stencil s, double h) {
                   exact_curvature());
 }
 
-}  // namespace
+}
 
 TEST(DirectionalCurvature, CentralIsSecondOrder) {
   const double ratio = error(Stencil::Central, 0.02) / error(Stencil::Central, 0.01);

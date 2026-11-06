@@ -1,7 +1,7 @@
-"""CuestModel in the pipeline machinery: optimize, Hessian, frequencies (F7).
+"""CuestModel in the pipeline machinery: optimize, Hessian, frequencies.
 
 Frequencies are compared with PySCF's analytic DF-RHF Hessian at the same
-geometry; spec §14 tolerances: 1 cm^-1 above 500, 5 cm^-1 for 100-500,
+geometry; tolerances: 1 cm^-1 above 500, 5 cm^-1 for 100-500,
 10 cm^-1 below 100.
 """
 
@@ -41,7 +41,6 @@ MASSES = np.array([elements.isotope_mass(s) for s in SYMBOLS])
 @pytest.fixture(scope="module")
 def optimized(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     model = CuestModel(HF_SVP, SYMBOLS)
-    # Reference-level refinement (spec §6 "Residual force"), tighter than G1.
     opt = _core.minimize(
         model,
         START,
@@ -50,7 +49,6 @@ def optimized(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
         gtol_max=REFERENCE_GTOL_MAX,
     )
     x = np.asarray(opt["coords"])
-    # Spec §6 method: probe the gradient noise, then choose h; Hessians at h and 2h.
     bend = np.zeros(9)
     bend[4], bend[7] = 1.0, -1.0
     eps, _ = _core.probe_noise(model, x, bend)
@@ -86,7 +84,7 @@ def test_line_probe_noise_and_sum_rule_noise(optimized: dict[str, object]) -> No
     h = optimized["h"]
     raw = optimized["raws"][h]  # type: ignore[index]
     v = _core.analyze_vibrations(0.5 * (raw + raw.T), optimized["x"], MASSES)
-    assert v.translation_sum_rule * h < 1e-10  # effective stencil noise, Eh/bohr
+    assert v.translation_sum_rule * h < 1e-10
 
 
 def test_warm_starts_reduce_scf_iterations(optimized: dict[str, object]) -> None:
@@ -99,14 +97,14 @@ def test_warm_starts_reduce_scf_iterations(optimized: dict[str, object]) -> None
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "spec section 9 target not met: warm starts begin at orbital gradient ~9e-5 and "
+        "warm-start target not met: warm starts begin at orbital gradient ~9e-5 and "
         "DIIS gains a factor of 3-4 per iteration, so reaching the stencil threshold still "
         "takes most of a cold run's iterations. Reaching 50% needs a second-order solver "
         "or a looser threshold."
     ),
 )
-def test_warm_starts_on_stencil_points_meet_spec_target(optimized: dict[str, object]) -> None:
-    """Spec §9 target: warm-start SCF iterations <= 50% of cold-start iterations."""
+def test_warm_starts_on_stencil_points_halve_iterations(optimized: dict[str, object]) -> None:
+    """Target: warm-start SCF iterations <= 50% of cold-start iterations."""
     model: CuestModel = optimized["model"]  # type: ignore[assignment]
     cold = model.run(optimized["x"], gradient=False, warm=False).iterations
     warm = float(np.mean(optimized["stencil"]))  # type: ignore[arg-type]

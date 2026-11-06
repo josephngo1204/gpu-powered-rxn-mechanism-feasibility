@@ -1,10 +1,10 @@
-"""C3 (spec §3): X- + CH3CH2X (X = F, Cl), SN2 vs anti-E2 vs syn-E2 in the gas phase.
+"""C3: X- + CH3CH2X (X = F, Cl), SN2 vs anti-E2 vs syn-E2 in the gas phase.
 
-Spec §14: "C3 reproduces both halide preference orders and anti-over-syn E2".
+Pass criteria: both halide preference orders and anti-over-syn E2 are reproduced.
 CCSD(T) TS energies (data/references.yaml c3_ccsdt_ts, kcal/mol from separated reactants):
   F-:  anti-E2 -1.27 < SN2 2.20 < syn-E2 5.68
   Cl-: SN2 5.81 < anti-E2 18.18 < syn-E2 30.92
-Spec §3: the order matters as much as the error size. Spec §14: MAD <= 2 kcal/mol
+The order matters as much as the error size; MAD <= 2 kcal/mol
 on the high-quality reference subset.
 
 Set SADDLE_C3_F_RUN / SADDLE_C3_CL_RUN to finished run directories to check
@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.gpu, pytest.mark.slow, pytest.mark.ladder]
 ROOT = Path(__file__).resolve().parents[2]
 REF = yaml.safe_load((ROOT / "data" / "references.yaml").read_text())["c3_ccsdt_ts"]
 PATHWAYS = ("sn2", "anti_e2", "syn_e2")
-MAD_LIMIT = 2.0  # kcal/mol, spec §14
+MAD_LIMIT = 2.0
 CASES = {"f": ("F_minus", "SADDLE_C3_F_RUN"), "cl": ("Cl_minus", "SADDLE_C3_CL_RUN")}
 
 

@@ -22,8 +22,6 @@ Eigen::MatrixXd random_symmetric(Eigen::Index n, unsigned seed) {
   return 0.5 * (a + a.transpose()) + Eigen::VectorXd::LinSpaced(n, -2.0, 10.0).asDiagonal().toDenseMatrix();
 }
 
-// Zig-zag chain of n atoms with nearest and next-nearest springs, at rest.
-// Spring 0-1 can be made negative to create a well-separated saddle mode.
 struct Chain {
   Geometry geometry;
   Springs model;
@@ -45,7 +43,7 @@ Chain make_chain(int n, double k01) {
   return {g, Springs{springs}, Eigen::VectorXd::Constant(n, 12.0)};
 }
 
-}  // namespace
+}
 
 TEST(Davidson, FindsLowestEigenpairsOfDenseMatrix) {
   const Eigen::MatrixXd a = random_symmetric(60, 1);
@@ -58,7 +56,6 @@ TEST(Davidson, FindsLowestEigenpairsOfDenseMatrix) {
                                opts, a.diagonal());
   ASSERT_TRUE(result.converged);
   for (int k = 0; k < 3; ++k) EXPECT_NEAR(result.eigenvalues[k], exact.eigenvalues()[k], 1e-7);
-  // Eigenvectors match up to sign.
   EXPECT_NEAR(std::abs(result.eigenvectors.col(0).dot(exact.eigenvectors().col(0))), 1.0, 1e-6);
 }
 
@@ -124,7 +121,6 @@ TEST(PartialScreen, TwentyAtomCostIsWithinFifteenPercentOfFullHessian) {
   opts.n_roots = 1;
   opts.step = 1e-3;
   opts.tolerance_cm = 5.0;
-  // A TS guess carries its hypothesized bond change; use it as the start vector.
   Eigen::VectorXd guess = Eigen::VectorXd::Zero(60);
   const Eigen::Vector3d bond = (chain.geometry.coords.segment<3>(3) - chain.geometry.coords.segment<3>(0)).normalized();
   guess.segment<3>(0) = -bond;

@@ -15,15 +15,14 @@ import numpy as np
 import numpy.typing as npt
 import yaml
 
-from saddle import elements, units
+from saddle import elements
 from saddle.analysis.uncertainty import Term
-from saddle.hypothesis import Hypothesis, load
+from saddle.hypothesis import Hypothesis, HypothesisError, load, read_xyz
 from saddle.workflows.models import SystemInfo
 
 FloatArray = npt.NDArray[np.float64]
 
 CAMPAIGN_SCHEMA_VERSION = 1
-# Uncertainty components the pipeline measures itself; a campaign may not state them.
 MEASURED_COMPONENTS = ("numerical", "thermo")
 
 
@@ -119,14 +118,22 @@ class Campaign:
         )
 
 
-def _read_guess(path: Path, n_atoms: int) -> FloatArray:
-    """An XYZ file (Angstrom) as flat coordinates in bohr."""
-    lines = path.read_text().splitlines()
-    n = int(lines[0].split()[0])
-    if n != n_atoms:
-        raise CampaignError(f"{path}: TS guess has {n} atoms, hypothesis has {n_atoms}")
-    xyz = [[float(v) for v in ln.split()[1:4]] for ln in lines[2 : 2 + n]]
-    return np.asarray(xyz).ravel() / units.BOHR_TO_ANGSTROM
+def _read_guess(path: Path, symbols: tuple[str, ...]) -> FloatArray:
+    """A TS guess XYZ file as flat bohr coordinates, in the hypothesis atom order."""
+    try:
+        guess_symbols, coords = read_xyz(path, "TS guess")
+    except HypothesisError as exc:
+        raise CampaignError(str(exc)) from exc
+    if len(guess_symbols) != len(symbols):
+        raise CampaignError(
+            f"{path}: TS guess has {len(guess_symbols)} atoms, hypothesis has {len(symbols)}"
+        )
+    if guess_symbols != symbols:
+        raise CampaignError(
+            f"{path}: TS guess atom order {list(guess_symbols)} does not match the "
+            f"hypothesis atom order {list(symbols)}"
+        )
+    return coords.ravel()
 
 
 def _stated_uncertainty(raw: Mapping[str, Any]) -> dict[str, Term]:
@@ -159,7 +166,8 @@ def load_campaign(path: str | Path) -> Campaign:
         raise CampaignError(
             f"campaign pathways {sorted(guesses_raw)} != hypothesis {sorted(names)}"
         )
-    guesses = {n: _read_guess(base / g["ts_guess"], hyp.n_atoms) for n, g in guesses_raw.items()}
+    hyp_symbols = tuple(s for sp in hyp.reactants for s in sp.symbols)
+    guesses = {n: _read_guess(base / g["ts_guess"], hyp_symbols) for n, g in guesses_raw.items()}
     sym = raw.get("symmetry_numbers", {})
     return Campaign(
         path=path,

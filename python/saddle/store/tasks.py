@@ -1,4 +1,4 @@
-"""SQLite task store (spec §7 "Task", §9 "Execution model").
+"""SQLite task store.
 
 Tasks are immutable and content-addressed: the id hashes the kind, the
 config and the geometry hash, so resubmitting the same work is a no-op.

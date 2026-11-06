@@ -74,7 +74,7 @@ def test_different_settings_do_not_reuse(tmp_path: Path) -> None:
 def test_store_rejects_conflicting_rewrite(tmp_path: Path) -> None:
     store = StencilStore(tmp_path / "s.sqlite")
     store.put("k", 1.0, np.zeros(3))
-    store.put("k", 1.0, np.zeros(3))  # identical rewrite is fine
+    store.put("k", 1.0, np.zeros(3))
     with pytest.raises(ValueError, match="conflict"):
         store.put("k", 2.0, np.zeros(3))
 

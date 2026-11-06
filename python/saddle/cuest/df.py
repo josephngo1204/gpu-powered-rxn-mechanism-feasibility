@@ -1,4 +1,4 @@
-"""Density-fitted Coulomb and exchange (spec §2: J and K always use DF in cuEST)."""
+"""Density-fitted Coulomb and exchange (J and K always use DF in cuEST)."""
 
 from collections.abc import Sequence
 from typing import Any
@@ -21,15 +21,13 @@ from saddle.cuest.core import (
 P = cb.CuestParametersType
 A = cb.CuestDFIntPlanParametersAttributes
 
-# Scratch for DF exchange. NVIDIA suggests 8 GB on large GPUs and down to 2 GB on
-# smaller ones; the MIG slice has 18 GB in total.
 DEFAULT_EXCHANGE_BUFFER_BYTES = 2 << 30
 
 
 class DFIntPlan:
     """DF integral plan for one primary basis, auxiliary basis and pair list.
 
-    Plan creation is expensive and coordinate-bound (spec §2), so each
+    Plan creation is expensive and coordinate-bound, so each
     displaced geometry needs its own plan.
     """
 
@@ -159,10 +157,10 @@ class DFIntPlan:
     ) -> Any:
         """d/dR [s_D E_J(D) + s_C sum_N E_K(C_N)] (natom, 3).
 
-        The spin formulation decides the scales (spec §8); the typed callers in
+        The spin formulation decides the scales; the typed callers in
         saddle.scf pass them (RKS: s_D = 2 with D = C C^T, s_C = -1, one set).
         `last_use=True` lets cuEST overwrite the plan's tensors, after which the
-        plan is unusable (spec §8 hazard), so it defaults to recompute.
+        plan is unusable, so it defaults to recompute.
         """
         d = cupy.ascontiguousarray(density, dtype=cupy.float64)
         mats = [cupy.ascontiguousarray(c, dtype=cupy.float64) for c in occupied_sets]

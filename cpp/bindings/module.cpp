@@ -1,7 +1,3 @@
-// Python bindings for the C++ core. Fake surfaces are exposed as classes;
-// search, IRC, noise and Hessian routines accept any Python object with
-// evaluate(coords) -> (energy, gradient) through CallbackModel, which is how
-// the Python cuEST models reach this code.
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
@@ -38,11 +34,9 @@ std::pair<double, Eigen::VectorXd> evaluate(Model& model, const Eigen::VectorXd&
   return {e.energy.value(), std::move(e.gradient)};
 }
 
-// Adapts any Python object with evaluate(coords) -> (energy, gradient) to the
-// ElectronicModel concept, so C++ search code runs on Python-side models.
 struct CallbackModel {
   nb::object target;
-  saddle::Evaluation evaluate(const saddle::Geometry& g, const saddle::WarmStart& /*guess*/) {
+  saddle::Evaluation evaluate(const saddle::Geometry& g, const saddle::WarmStart& ) {
     nb::object out = target.attr("evaluate")(g.coords);
     auto [energy, gradient] = nb::cast<std::pair<double, Eigen::VectorXd>>(out);
     if (gradient.size() != g.coords.size()) {
@@ -91,7 +85,7 @@ saddle::search::OptimizerOptions optimizer_options(int max_iterations, double tr
 constexpr const char* kEvaluateDoc =
     "Return (energy in Eh, gradient in Eh/bohr) at flattened coordinates in bohr.";
 
-}  // namespace
+}
 
 NB_MODULE(_core, m) {
   m.doc() = "Saddle C++ core";

@@ -13,7 +13,6 @@ namespace {
 constexpr int kBisectionIterations = 60;
 constexpr double kTinyComponent = 1e-14;
 
-// Lowest-eigenvalue RFO step with scaling alpha (Besalu and Bofill 1998).
 Eigen::VectorXd rfo_min_component(const Eigen::VectorXd& b, const Eigen::VectorXd& f, double alpha) {
   const Eigen::Index n = b.size();
   if (n == 0) return Eigen::VectorXd(0);
@@ -26,13 +25,11 @@ Eigen::VectorXd rfo_min_component(const Eigen::VectorXd& b, const Eigen::VectorX
   const Eigen::VectorXd v = es.eigenvectors().col(0);
   const double t = v[n];
   if (std::abs(t) < kTinyComponent) {
-    // Degenerate augmented problem; fall back to a Newton-like step on |b|.
     return -f.cwiseQuotient(b.cwiseAbs().cwiseMax(1e-8));
   }
   return v.head(n) / (t * sa);
 }
 
-// Highest-eigenvalue RFO step along a single mode.
 double rfo_max_component(double b, double f, double alpha) {
   const double sa = std::sqrt(alpha);
   Eigen::Matrix2d m;
@@ -43,10 +40,6 @@ double rfo_max_component(double b, double f, double alpha) {
   return v[0] / (v[1] * sa);
 }
 
-// Shrink a step into the trust radius. `step_at(alpha)` must give a step whose
-// length falls as the RFO scaling alpha >= 1 grows. Returns alpha = 1 when the
-// unscaled step already fits; otherwise bisects for the smallest alpha that
-// fits, and clips the final step in case bisection stops just outside.
 template <class StepAt>
 std::pair<double, Eigen::VectorXd> restrict_to_trust(const StepAt& step_at, double trust) {
   Eigen::VectorXd step = step_at(1.0);
@@ -63,13 +56,12 @@ std::pair<double, Eigen::VectorXd> restrict_to_trust(const StepAt& step_at, doub
   return {hi, step};
 }
 
-// Quadratic-model energy change g.s + 1/2 s.H.s.
 double predicted_change(const Eigen::VectorXd& gradient, const Eigen::MatrixXd& hessian,
                         const Eigen::VectorXd& step) {
   return gradient.dot(step) + 0.5 * step.dot(hessian * step);
 }
 
-}  // namespace
+}
 
 double rms(const Eigen::VectorXd& v) {
   return v.size() == 0 ? 0.0 : std::sqrt(v.squaredNorm() / static_cast<double>(v.size()));
@@ -134,7 +126,6 @@ PrfoStep rs_prfo_step(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& gra
   if (mode < 0 || mode >= n) throw std::invalid_argument("P-RFO mode index out of range");
   const Eigen::VectorXd f = v.transpose() * gradient;
 
-  // Split the eigenbasis: maximize along `mode`, minimize along all others.
   Eigen::VectorXd b_min(n - 1), f_min(n - 1);
   for (Eigen::Index i = 0, j = 0; i < n; ++i) {
     if (i == mode) continue;
@@ -154,4 +145,4 @@ PrfoStep rs_prfo_step(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& gra
   return PrfoStep{s, predicted_change(gradient, hessian, s), alpha, b, v};
 }
 
-}  // namespace saddle::search
+}

@@ -1,12 +1,13 @@
-# MVP results baseline (2026-11-05)
+# Results: C1, Cl⁻ + CH₃Cl identity SN2 (gas phase)
 
-Result summaries (`campaign.json`) copied from finished `runs/`, with their markdown reports
-and a combined dashboard. HDF5 and SQLite stores are not committed (spec §12).
-Each `campaign.json` records the code commit, cuEST version, GPU and math mode it was produced with.
+- [`c1/report.md`](c1/report.md): full report with gates, uncertainty budget, sensitivity, tunneling and IRC
+- [`c1/campaign.json`](c1/campaign.json): machine-readable summary with provenance (code commit, cuEST version, GPU, math mode)
+- [`dashboard.html`](dashboard.html): self-contained interactive dashboard; open it in a browser
 
-| Run | Produced by | Model |
-|---|---|---|
-| `c1/` | commit 6429ab7, cuEST 0.2.2, H200 NVL MIG 1g.18gb, native FP64 | wB97X-V/def2-SVPD, gas |
-| `fake/` | commit b1c0483 (CPU) | fake pair-model surface |
+| Setting | Value |
+|---|---|
+| Model | ωB97X-V/def2-SVPD, density-fitted, (75,302) grid |
+| Hardware | NVIDIA H200 NVL, one MIG 1g.18gb slice, native FP64 |
+| Library | cuEST 0.2.2 |
 
-Regenerate: `saddle dashboard results/mvp --out results/mvp/dashboard.html`
+Regenerate the dashboard: `saddle dashboard results/mvp --out results/mvp/dashboard.html`

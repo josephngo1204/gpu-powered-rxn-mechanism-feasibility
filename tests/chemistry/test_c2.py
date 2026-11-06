@@ -1,14 +1,14 @@
-"""C2 (spec §3): Cl- + CH3Cl SN2 in PCM water must show the solvent-driven change.
+"""C2: Cl- + CH3Cl SN2 in PCM water must show the solvent-driven change.
 
-Spec §14: "C2 shows the solvent-driven profile change": the gas-phase double
+Expected solvent-driven profile change: the gas-phase double
 well (C1: complex about -11 kcal/mol) becomes close to unimodal, and the barrier
 rises toward the estimated 26 kcal/mol (data/references.yaml).
 
-Tolerances are fixed before the run (spec §12 forbids tuning on validation data):
+Tolerances are fixed before the run:
 - "close to unimodal": any ion-dipole well is shallower than 3 kcal/mol;
 - "higher barrier": electronic barrier at least 10 kcal/mol, against +2.5 in the gas phase;
-- dG++ within 4 kcal/mol of 26. That is twice the spec §14 MAD target, because
-  the reference is an estimate rather than a benchmark (ADR 0002, PROPOSED).
+- dG++ within 4 kcal/mol of 26. That is twice the 2 kcal/mol MAD target,
+  because the reference is an estimate rather than a benchmark.
 
 Set SADDLE_C2_RUN to a finished `saddle run campaigns/c2/c2_sn2_water.yaml`
 output directory to check it without rerunning.

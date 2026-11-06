@@ -1,7 +1,4 @@
-"""Hessian quality report against the spec §6 targets (feeds gate G3).
-
-Targets come from spec §6. Changing them is an "Ask first" item (spec §12).
-"""
+"""Hessian quality report against fixed numerical targets (feeds gate G3)."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -14,9 +11,7 @@ from saddle import _core, units
 
 FloatArray = npt.NDArray[np.float64]
 
-# Frequencies above this are compared in absolute cm^-1 (spec §6).
 STABLE_MODE_FLOOR_CM = 100.0
-# A column whose asymmetry share exceeds this multiple of the median is a spike.
 SPIKE_SHARE_RATIO = 4.0
 
 
@@ -27,8 +22,6 @@ class HessianTargets:
     max_frequency_change_cm: float = 1.0
     max_imaginary_change_fraction: float = 0.02
     max_delta_g_change_kcal_mol: float = 0.1
-    # Imaginary modes smaller than this are numerical zeros, not compared.
-    # PROPOSED fallback (spec gives none); pass the measured noise floor instead.
     imaginary_threshold_cm: float = 10.0
 
 
@@ -41,7 +34,6 @@ class Check:
     evaluated: bool = True
     required: bool = True
     detail: str = ""
-    # Reported but never decides pass/fail (rotational residual of a DFT grid).
     informational: bool = False
 
 
@@ -77,7 +69,7 @@ def external_residuals(
 
     Translations are exactly invariant for cuEST models (the grid moves with
     the atoms); rotations are not for DFT, because integration grids are not
-    rotationally invariant (spec §6 "DFT grid: orientation dependence").
+    rotationally invariant.
     """
     m = np.asarray(masses, dtype=np.float64)
     x = np.asarray(coords, dtype=np.float64).reshape(-1, 3)
@@ -176,7 +168,7 @@ def _single_hessian_checks(m: _StepMetrics, t: HessianTargets) -> list[Check]:
             t.max_external_residual_cm,
             m.rotation_cm <= t.max_external_residual_cm,
             informational=True,
-            detail="grid orientation error; judged by the G8 rotation test (user decision)",
+            detail="grid orientation error; judged by the G8 rotation test",
         ),
     ]
 

@@ -46,7 +46,6 @@ def test_argon_translational_entropy_matches_sackur_tetrode() -> None:
         symmetry_number=1,
         multiplicity=1,
     )
-    # NIST S = 154.85 J/mol/K is at 1 bar; at 1 atm subtract R ln(1.01325) = 0.109.
     assert s_j_mol_k(res.entropy_translational) == pytest.approx(154.85 - 0.109, abs=0.01)
     assert res.entropy_rotational == 0.0
     assert res.zpe == 0.0
@@ -63,7 +62,6 @@ def test_water_entropy_matches_nist() -> None:
         multiplicity=1,
     )
     assert s_j_mol_k(res.entropy_rotational) == pytest.approx(43.9, abs=0.2)
-    # NIST S = 188.84 J/mol/K at 1 bar -> 188.73 at 1 atm.
     assert s_j_mol_k(res.entropy) == pytest.approx(188.73, abs=0.2)
     assert units.hartree_to_kcal_mol(res.zpe) == pytest.approx(
         0.5 * (1595 + 3657 + 3756) / units.HARTREE_TO_WAVENUMBER * units.HARTREE_TO_KCAL_MOL
@@ -86,7 +84,6 @@ def test_symmetry_number_lowers_entropy_by_r_ln_sigma() -> None:
 
 
 def test_linear_molecule_rotational_entropy() -> None:
-    # CO, r = 1.128 A, sigma = 1: S_rot ~ 47.2 J/mol/K
     coords = np.array([0, 0, 0, 0, 0, 1.128]) / units.BOHR_TO_ANGSTROM
     res = thermo.rrho(
         coords_bohr=coords,
@@ -133,7 +130,6 @@ def test_standard_state_correction_is_1_89_kcal_per_species() -> None:
 
 
 def test_bimolecular_barrier_drops_by_1_89() -> None:
-    # TS is one species, reactants are two: net -1 correction on the barrier.
     corr = thermo.standard_state_correction(T)
     delta = corr - 2 * corr
     assert units.hartree_to_kcal_mol(delta) == pytest.approx(-1.89, abs=0.005)

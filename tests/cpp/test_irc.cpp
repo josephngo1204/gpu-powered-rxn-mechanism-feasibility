@@ -32,7 +32,7 @@ struct IrcCase {
   double ts_x, ts_y, a_x, a_y, b_x, b_y;
 };
 
-}  // namespace
+}
 
 class MullerBrownIrc : public ::testing::TestWithParam<IrcCase> {};
 

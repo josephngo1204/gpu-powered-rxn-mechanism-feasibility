@@ -13,7 +13,6 @@ namespace {
 
 constexpr double kMinNewNorm = 1e-10;
 
-// Orthogonalize v against the first `used` columns of basis (twice), return norm.
 double orthogonalize(Eigen::VectorXd& v, const Eigen::MatrixXd& basis, Eigen::Index used) {
   for (int pass = 0; pass < 2; ++pass) {
     if (used > 0) v -= basis.leftCols(used) * (basis.leftCols(used).transpose() * v);
@@ -21,7 +20,7 @@ double orthogonalize(Eigen::VectorXd& v, const Eigen::MatrixXd& basis, Eigen::In
   return v.norm();
 }
 
-}  // namespace
+}
 
 DavidsonResult davidson(const MatVec& matvec, Eigen::Index n, const DavidsonOptions& opt,
                         const Eigen::VectorXd& diagonal, const Eigen::MatrixXd& guess) {
@@ -49,7 +48,6 @@ DavidsonResult davidson(const MatVec& matvec, Eigen::Index n, const DavidsonOpti
     return true;
   };
 
-  // Start vectors: guess columns, then unit vectors at the smallest diagonal.
   for (Eigen::Index c = 0; c < guess.cols(); ++c) add(guess.col(c));
   std::vector<Eigen::Index> order(static_cast<std::size_t>(n));
   for (Eigen::Index i = 0; i < n; ++i) order[static_cast<std::size_t>(i)] = i;
@@ -79,7 +77,6 @@ DavidsonResult davidson(const MatVec& matvec, Eigen::Index n, const DavidsonOpti
     result.converged = roots == k && (result.residual_norms.array() <= opt.tolerance).all();
     if (result.converged || matvecs >= opt.max_matvecs) return result;
 
-    // Restart on the Ritz vectors when the subspace is full.
     if (used + k > max_sub) {
       v.leftCols(roots) = x;
       w.leftCols(roots) = w.leftCols(used) * s;
@@ -98,8 +95,8 @@ DavidsonResult davidson(const MatVec& matvec, Eigen::Index n, const DavidsonOpti
       }
       grew = add(std::move(t)) || grew;
     }
-    if (!grew) return result;  // stagnated; report as unconverged
+    if (!grew) return result;
   }
 }
 
-}  // namespace saddle::hess
+}

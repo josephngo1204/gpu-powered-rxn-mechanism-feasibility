@@ -21,7 +21,7 @@ IntArray = npt.NDArray[np.int64]
 def _pyscf_index_of_cuest_component(L: int, k: int) -> int:
     """Position in PySCF's shell of cuEST's k-th component."""
     if L == 1:
-        return (2, 0, 1)[k]  # cuEST z, x, y -> PySCF x=0, y=1, z=2
+        return (2, 0, 1)[k]
     m = 0 if k == 0 else ((k + 1) // 2 if k % 2 == 1 else -(k // 2))
     return m + L
 
@@ -34,7 +34,6 @@ def permutation(basis: BasisSet, symbols: Sequence[str], mol: Any) -> IntArray:
     """
     if not basis.pure:
         raise ValueError("only pure (spherical) bases are mapped")
-    # cuEST AO offset of every Saddle shell, keyed by atom.
     ours: list[list[tuple[int, tuple[float, ...], int]]] = []
     offset = 0
     for sym in symbols:

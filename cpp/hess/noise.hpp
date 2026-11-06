@@ -9,25 +9,18 @@
 namespace saddle::hess {
 
 struct NoiseEstimate {
-  double epsilon;   // estimated gradient noise, Eh/bohr (per component RMS)
-  int order;        // finite-difference order used
-  int n_gradients;  // gradients evaluated
+  double epsilon;
+  int order;
+  int n_gradients;
 };
 
-// Estimate gradient noise from samples g(x + k*delta*u), k = 0..n-1, using
-// order-m forward differences. A smooth surface contributes ~delta^m g^(m),
-// which vanishes; independent noise of RMS eps contributes variance
-// eps^2 * C(2m, m). Spec §6 "Noise probe".
 [[nodiscard]] NoiseEstimate estimate_noise_from_line(const std::vector<Eigen::VectorXd>& samples,
                                                      int order);
 
-// h_opt = (3 eps / |E''''|)^(1/3)
 [[nodiscard]] double optimal_step(double epsilon, double fourth_derivative);
 
-// dk(h) = eps / h + |E''''| h^2 / 6
 [[nodiscard]] double fd_error(double epsilon, double step, double fourth_derivative);
 
-// Frequency (cm^-1) of a pure force-constant error dk (Eh/bohr^2) on mass m (amu).
 [[nodiscard]] double noise_frequency_cm(double force_constant_error, double mass_amu);
 
 template <ElectronicModel Model>
@@ -54,4 +47,4 @@ template <ElectronicModel Model>
   return estimate_noise_from_line(samples, order);
 }
 
-}  // namespace saddle::hess
+}

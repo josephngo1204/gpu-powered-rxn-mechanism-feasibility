@@ -39,7 +39,7 @@ def test_clean_hessians_pass_all_targets() -> None:
     assert report.flagged_columns == ()
 
 
-def test_targets_match_spec_section_6() -> None:
+def test_default_targets() -> None:
     t = HessianTargets()
     assert t.max_asymmetry == 1e-4
     assert t.max_external_residual_cm == 5.0
@@ -73,7 +73,7 @@ def test_broken_translation_invariance_fails_translation_residual() -> None:
 
 
 def test_rotational_noninvariance_is_reported_but_does_not_fail() -> None:
-    """A DFT grid breaks rotational invariance only (user decision: split TR check)."""
+    """A DFT grid breaks rotational invariance only."""
     sq = np.repeat(np.sqrt(MASSES), 3)
     x = COORDS.reshape(-1, 3)
     r = x - (MASSES[:, None] * x).sum(0) / MASSES.sum()
@@ -82,7 +82,7 @@ def test_rotational_noninvariance_is_reported_but_does_not_fail() -> None:
         for a in range(3):
             rot[3 * i : 3 * i + 3, a] = np.sqrt(MASSES[i]) * np.cross(np.eye(3)[a], r[i])
     q, _ = np.linalg.qr(rot)
-    bump = 2e-6 * (q @ q.T)  # mass-weighted rotational curvature only
+    bump = 2e-6 * (q @ q.T)
     perturbed = {h: _raw(h) + np.outer(sq, sq) * bump for h in (1e-3, 2e-3)}
     report = assess_hessians(perturbed, COORDS, MASSES)
     assert _check(report, "translation_residual").passed
@@ -132,7 +132,6 @@ def test_rejects_empty_input() -> None:
 
 
 def test_near_zero_imaginary_modes_are_not_compared() -> None:
-    # Linear A-H-C saddle: bends sit at about -0.5 and -1.0 cm^-1 for the two steps.
     coords = np.array([0.0, 0.0, 0.0, 2.5, 0.0, 0.0, 5.0, 0.0, 0.0])
     masses = np.array([12.0, 1.00782503223, 12.0])
     model = _core.Springs([(0, 1, -0.06, 2.5), (1, 2, -0.06, 2.5), (0, 2, 0.4, 5.0)])

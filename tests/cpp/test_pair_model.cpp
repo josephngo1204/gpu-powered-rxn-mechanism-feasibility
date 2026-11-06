@@ -13,8 +13,6 @@ using namespace saddle::surfaces;
 
 namespace {
 
-// Collinear A(0)-H(1)-C(2) with A...C held at 6.5 bohr: a symmetric double
-// well with a ~0.03 Eh barrier for H transfer.
 constexpr double kAC = 6.5;
 
 PairModel h_transfer() {
@@ -32,7 +30,7 @@ Geometry at(double h_x, double h_y = 0.0) {
 
 const Eigen::Vector3d kMasses(12.0, 1.00782503223, 12.0);
 
-}  // namespace
+}
 
 static_assert(ElectronicModel<PairModel>);
 
@@ -70,8 +68,6 @@ TEST(PairModel, IrcConnectsTheTwoWells) {
   ASSERT_TRUE(r.reverse.endpoint.converged);
   auto ah = [](const Geometry& g) { return (g.coords.segment<3>(3) - g.coords.segment<3>(0)).norm(); };
   const double a = ah(r.forward.endpoint.geometry), b = ah(r.reverse.endpoint.geometry);
-  // The remote Morse tail pulls H toward the acceptor, so the well sits a
-  // little beyond r_eq = 1.8.
   EXPECT_NEAR(std::min(a, b), 1.8, 0.1);
   EXPECT_NEAR(std::max(a, b), kAC - 1.8, 0.1);
 }

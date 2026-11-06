@@ -1,4 +1,4 @@
-"""Internal (RHF -> RHF) SCF stability for gate G2 (spec §5)."""
+"""Internal (RHF -> RHF) SCF stability for gate G2."""
 
 import numpy as np
 import pytest
@@ -48,7 +48,6 @@ def pyscf_lowest(n: int) -> np.ndarray:
     mf = scf.RHF(mol).density_fit(auxbasis="def2-universal-jkfit")
     mf.conv_tol = 1e-12
     mf.kernel()
-    # PySCF's internal-stability Hessian is 2 x hop (pyscf.scf.stability.rhf_internal).
     _, hop, hdiag = newton_ah.gen_g_hop_rhf(mf, mf.mo_coeff, mf.mo_occ, with_symmetry=False)
     op = spla.LinearOperator(
         (hdiag.size, hdiag.size), matvec=lambda v: 2.0 * hop(v.ravel()).real.ravel()
@@ -63,7 +62,6 @@ def test_rhf_stability_roots_match_pyscf_up_to_normalization() -> None:
     eigs = r.stability_eigenvalues  # type: ignore[attr-defined]
     ref = pyscf_lowest(3)
     ratio = ref / eigs
-    # One common normalization for all roots proves the operator is right.
     np.testing.assert_allclose(ratio, ratio[0], rtol=1e-4)
     assert ratio[0] == pytest.approx(round(ratio[0]), rel=1e-4)
 

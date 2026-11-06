@@ -14,34 +14,29 @@ namespace saddle::hess {
 
 struct ScreenOptions {
   int n_roots = 1;
-  double step = 5e-3;          // bohr, along each Cartesian direction
-  double tolerance_cm = 1.0;   // target accuracy of screened frequencies
+  double step = 5e-3;
+  double tolerance_cm = 1.0;
   int max_matvecs = 60;
 };
 
 struct ScreenResult {
-  Eigen::VectorXd frequencies_cm;   // lowest vibrational modes, ascending
-  Eigen::MatrixXd modes_cartesian;  // normalized Cartesian directions
+  Eigen::VectorXd frequencies_cm;
+  Eigen::MatrixXd modes_cartesian;
   int n_matvecs;
   int n_gradients;
   bool converged;
 };
 
 namespace detail {
-// Residual tolerance (mass-weighted eigenvalue units) for a frequency tolerance.
 inline double eigenvalue_tolerance(double tolerance_cm) {
   using constants::kAmuToElectronMass;
   using constants::kHartreeToWavenumber;
-  // Calibrate at 10 cm^-1 so modes below 100 cm^-1 meet the spec §14 10 cm^-1 target.
   constexpr double kReferenceFrequency = 10.0;
   return 2.0 * kReferenceFrequency * tolerance_cm * kAmuToElectronMass /
          (kHartreeToWavenumber * kHartreeToWavenumber);
 }
-}  // namespace detail
+}
 
-// Lowest vibrational modes by Davidson on the projected mass-weighted
-// Hessian, using H*v from central gradient differences (spec §6 "Partial
-// Hessian screen"). Two gradients per product.
 template <ElectronicModel Model>
 [[nodiscard]] ScreenResult partial_hessian_screen(Model& model, const Geometry& reference,
                                                   const Eigen::VectorXd& masses_amu,
@@ -67,7 +62,7 @@ template <ElectronicModel Model>
     return model.evaluate(g, WarmStart{}).gradient;
   };
   auto matvec = [&](const Eigen::VectorXd& y) -> Eigen::VectorXd {
-    const Eigen::VectorXd x = inv_sqrt_m.cwiseProduct(internal * y);  // Cartesian direction
+    const Eigen::VectorXd x = inv_sqrt_m.cwiseProduct(internal * y);
     const double norm = x.norm();
     const Eigen::VectorXd u = x / norm;
     const Eigen::VectorXd hu = (grad_at(options.step * u) - grad_at(-options.step * u)) / (2.0 * options.step);
@@ -93,4 +88,4 @@ template <ElectronicModel Model>
   return out;
 }
 
-}  // namespace saddle::hess
+}

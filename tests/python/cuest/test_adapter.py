@@ -20,9 +20,7 @@ pytestmark = pytest.mark.gpu
 
 
 def test_workspace_struct_layout_matches_nvidia_docs() -> None:
-    # cuestWorkspaceDescriptor_t: size_t host, size_t device.
     assert WorkspaceDescriptor.dtype.itemsize == 16
-    # cuestWorkspace_t: uintptr_t host, size_t host size, uintptr_t device, size_t device size.
     assert Workspace.dtype.itemsize == 32
     assert Workspace.dtype.names == (
         "hostBuffer",
@@ -46,14 +44,12 @@ def test_handle_lifecycle_and_math_mode() -> None:
         h.set_math_mode(MathMode.DEFAULT)
         assert h.math_mode is MathMode.DEFAULT
     assert h.closed
-    h.close()  # idempotent
+    h.close()
     with pytest.raises(CuestError, match="closed"):
         _ = h.raw
 
 
 def test_real_cuest_failure_raises() -> None:
-    # An empty primitive list reaches cuEST as a NULL pointer, which is checked
-    # before the zero-count rule; either documented status is a failure.
     with Handle(MathMode.NATIVE_FP64) as h, pytest.raises(CuestError) as info:
         AOShell(h, is_pure=True, angular_momentum=0, exponents=[], coefficients=[])
     assert info.value.status_name in {"NULL_POINTER", "INVALID_ARGUMENT"}

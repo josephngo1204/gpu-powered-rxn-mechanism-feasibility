@@ -1,4 +1,4 @@
-"""RKS against PySCF in the converged-grid limit (spec §11 cross-code rules)."""
+"""RKS against PySCF in the converged-grid limit."""
 
 import numpy as np
 import pytest
@@ -22,8 +22,6 @@ XYZ = (
     / units.BOHR_TO_ANGSTROM
 )
 FINE = GridSpec(150, 974)
-# Different atomic partitioning and radial schemes agree only in the
-# converged-grid limit; 1e-6 Eh is the expected residual there.
 TOL = 2e-6
 
 
@@ -92,7 +90,7 @@ def test_hf_is_not_an_xc_functional() -> None:
 def test_wb97x_v_gap_to_pyscf_is_the_long_range_df_convention() -> None:
     """The ~4e-5 Eh gap is -1/2 f_LRC times the long-range DF exchange difference.
 
-    See tests/cross_code/test_range_separated_df.py and docs/adr/0003; VV10 is
+    See tests/cross_code/test_range_separated_df.py; VV10 is
     not the cause (wB97X without VV10 shows the same gap).
     """
     r = ours("WB97X-V")
@@ -110,6 +108,5 @@ def test_wb97x_v_gap_to_pyscf_is_the_long_range_df_convention() -> None:
         g.prune = None
     mf.conv_tol = 1e-11
     gap = r.energy - float(mf.kernel())  # type: ignore[attr-defined]
-    # -1/2 * 0.833 * 9.5e-5 = -4.0e-5 predicted before SCF relaxation.
     assert -5e-5 < gap < -2.5e-5
     assert r.nonlocal_energy > 0  # type: ignore[attr-defined]

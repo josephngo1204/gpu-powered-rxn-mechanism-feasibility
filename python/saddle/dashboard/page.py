@@ -53,9 +53,6 @@ def verdict_badge(verdict: str) -> str:
     )
 
 
-# --------------------------------------------------------------------------- overview
-
-
 def _plain_words(campaigns: Sequence[Campaign]) -> str:
     cards = "".join(
         f'<div class="headline"><strong>{esc(c.label)} / {esc(p.name)}</strong>'
@@ -133,9 +130,6 @@ def _technical_overview(campaigns: Sequence[Campaign]) -> str:
   {gates}
   {_details("What each check asks", f'<ul class="small">{legend}</ul>')}
 </section>"""
-
-
-# --------------------------------------------------------------------------- campaign
 
 
 def _reference_table(c: Campaign) -> str:
@@ -275,9 +269,6 @@ def _campaign_section(c: Campaign) -> str:
   {_reference_table(c)}
   {"".join(_pathway_section(c, p) for p in c.pathways)}
 </section>"""
-
-
-# --------------------------------------------------------------------------- page
 
 
 def render_dashboard(runs: Sequence[Run], references: Mapping[str, Any] | None = None) -> str:

@@ -1,8 +1,8 @@
-"""Analytic gradients against central finite differences of the energy (Stage 2 exit).
+"""Analytic gradients against central finite differences of the energy.
 
-Spec §14: RMS error <= 1e-6 Eh/bohr. Each method isolates terms: HF covers
+Target: RMS error <= 1e-6 Eh/bohr. Each method isolates terms: HF covers
 the one-electron, overlap and J/K terms; PBE the XC term (including any
-grid-weight contribution, spec §16); wB97X-V adds long-range K and VV10;
+grid-weight contribution); wB97X-V adds long-range K and VV10;
 C-PCM adds the solvation term.
 """
 
@@ -21,7 +21,6 @@ from saddle.solvation import PCMModel
 pytestmark = pytest.mark.gpu
 
 SYMBOLS = ["O", "H", "H"]
-# Slightly asymmetric water so no gradient component vanishes by symmetry.
 XYZ = (
     np.array([[0.02, -0.01, 0.1173], [0.0, 0.7672, -0.4592], [0.01, -0.7472, -0.4792]])
     / units.BOHR_TO_ANGSTROM
@@ -60,7 +59,6 @@ def check(**kw: object) -> None:
     err = analytic - numeric
     rms = float(np.sqrt(np.mean(err**2)))
     assert rms <= TOL_RMS, f"rms {rms:.2e}\nanalytic\n{analytic}\nfd\n{numeric}"
-    # Translational invariance of the analytic gradient.
     assert np.abs(analytic.sum(axis=0)).max() < 1e-6
 
 

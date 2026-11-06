@@ -1,4 +1,4 @@
-"""Gaussian basis sets from the Basis Set Exchange, normalized centrally (spec §8).
+"""Gaussian basis sets from the Basis Set Exchange, normalized centrally.
 
 cuEST needs normalized contraction coefficients, one family of shells (all
 pure or all Cartesian), and angular momentum contiguous from L = 0. General
@@ -26,7 +26,7 @@ class BasisError(ValueError):
 class Shell:
     angular_momentum: int
     exponents: tuple[float, ...]
-    coefficients: tuple[float, ...]  # as published, unnormalized
+    coefficients: tuple[float, ...]
     pure: bool
 
     def __post_init__(self) -> None:
@@ -112,7 +112,6 @@ def load_basis(name: str, symbols: Sequence[str], *, pure: bool = True) -> Basis
             exps = tuple(float(x) for x in sh["exponents"])
             ams = sh["angular_momentum"]
             columns = sh["coefficients"]
-            # One L per column for sp-type shells; otherwise one L, many columns.
             ls = ams if len(ams) == len(columns) else ams * len(columns)
             for L, col in zip(ls, columns, strict=True):
                 coefs = tuple(float(c) for c in col)

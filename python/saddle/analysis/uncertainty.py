@@ -1,4 +1,4 @@
-"""Barrier uncertainty budget (spec §6 "Uncertainty report").
+"""Barrier uncertainty budget.
 
 sigma_total^2 = sigma_numerical^2 + sigma_grid^2 + sigma_basis^2
               + sigma_method^2 + sigma_thermo^2 + sigma_solvent^2
@@ -64,7 +64,7 @@ class UncertaintyBudget:
         return not self.qualitative and not self.missing
 
     def breakdown(self) -> list[tuple[str, float | None, str, str]]:
-        """Rows (component, value, source, note) in spec order; missing rows say so."""
+        """Rows (component, value, source, note) in budget order; missing rows say so."""
         by_name = {t.name: t for t in self.terms}
         rows: list[tuple[str, float | None, str, str]] = []
         for c in COMPONENTS:

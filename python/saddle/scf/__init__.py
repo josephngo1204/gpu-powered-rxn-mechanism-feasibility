@@ -1,1 +1,1 @@
-"""Self-consistent field on cuEST and CuPy (ADR 0001)."""
+"""Self-consistent field on cuEST and CuPy."""

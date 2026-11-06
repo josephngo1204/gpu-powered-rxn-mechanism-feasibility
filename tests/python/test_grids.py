@@ -16,14 +16,13 @@ from saddle.grids import (
 @pytest.mark.parametrize("alpha", [0.05, 0.3, 1.0, 10.0, 100.0, 1000.0])
 def test_radial_quadrature_integrates_gaussians(alpha: float) -> None:
     r, w = becke_radial(99, 1.0)
-    exact = math.sqrt(math.pi) / (4.0 * alpha**1.5)  # int_0^inf r^2 exp(-a r^2) dr
+    exact = math.sqrt(math.pi) / (4.0 * alpha**1.5)
     assert float(np.sum(w * np.exp(-alpha * r * r))) == pytest.approx(exact, rel=1e-9)
 
 
 def test_radial_weights_include_r_squared_and_are_positive() -> None:
     r, w = becke_radial(75, 1.3)
     assert np.all(w > 0) and np.all(r > 0)
-    # int_0^inf r^2 exp(-r) dr = 2
     assert float(np.sum(w * np.exp(-r))) == pytest.approx(2.0, rel=1e-9)
 
 

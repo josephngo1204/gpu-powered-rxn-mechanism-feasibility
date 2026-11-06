@@ -1,4 +1,4 @@
-"""Transition-state-theory kinetics and the feasibility limit (spec §1).
+"""Transition-state-theory kinetics and the feasibility limit.
 
 Energies here are free energies in kcal/mol, which are a reporting boundary;
 the electronic-structure core stays in hartree.

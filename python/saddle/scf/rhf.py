@@ -22,11 +22,11 @@ from saddle.cuest.grid import MolecularGrid
 from saddle.cuest.oei import OEIntPlan
 from saddle.cuest.pcm import PCMIntPlan
 from saddle.cuest.xc import XCIntPlan
-from saddle.errors import SCFError as SCFError  # re-export
+from saddle.errors import SCFError as SCFError
+from saddle.errors import StabilityNotConverged
 from saddle.grids import GridSpec
 from saddle.solvation import PCMModel
 
-# Canonical orthogonalization drops overlap eigenvalues below this (rank guard, spec §6).
 OVERLAP_CUTOFF = 1e-8
 
 
@@ -39,8 +39,8 @@ class SCFResult:
     iterations: int
     orbital_gradient: float
     orbital_energies: npt.NDArray[np.float64]
-    coefficients: Any  # cupy (nao, nmo), columns are MOs
-    density: Any  # cupy (nao, nao), total density
+    coefficients: Any
+    density: Any
     retained_rank: int
     history: list[float] = field(default_factory=list)
     xc_energy: float = 0.0
@@ -49,10 +49,8 @@ class SCFResult:
     grid: str | None = None
     solvation_energy: float = 0.0
     solvent: str | None = None
-    gradient: npt.NDArray[np.float64] | None = None  # (natom, 3), Eh/bohr
+    gradient: npt.NDArray[np.float64] | None = None
     gradient_terms: dict[str, npt.NDArray[np.float64]] = field(default_factory=dict)
-    # Lowest eigenvalues of the real singlet stability matrix A + B (Eh); None if not run.
-    # Covers RHF -> RHF (internal) only; RHF -> UHF needs UKS (spec Stage 6).
     stability_eigenvalues: npt.NDArray[np.float64] | None = None
     orbitals_stable: bool | None = None
 
@@ -67,14 +65,9 @@ def nuclear_repulsion(coords_bohr: npt.ArrayLike, charges: Sequence[float]) -> f
     return e
 
 
-# Internal (real RHF -> RHF) stability: orbital-rotation step for the
-# finite-difference orbital-Hessian product, and the eigenvalue below which a
-# solution is called unstable (eigenvalues of A + B, Eh).
 STABILITY_STEP = 1e-4
 STABILITY_THRESHOLD = -1e-5
 
-# J/K gradient scales for the closed-shell (RKS) formulation, spec §8:
-# E_J = 2 E_J^bare(P), E_K = -E_K^bare(C_occ), P = C_occ C_occ^T.
 RKS_DENSITY_SCALE = 2.0
 RKS_COEFFICIENT_SCALE = -1.0
 
@@ -94,7 +87,7 @@ def nuclear_repulsion_gradient(
 
 
 def orthonormalize_guess(c_prev: Any, s: Any, n_occ: int) -> Any:
-    """Warm start (spec §6): Loewdin-orthonormalize previous MOs in the new overlap metric.
+    """Warm start: Loewdin-orthonormalize previous MOs in the new overlap metric.
 
     Only the occupied block matters for the first density, so the occupied
     columns are orthonormalized: C' = C (C^T S C)^(-1/2).
@@ -159,7 +152,7 @@ def internal_stability(
         guess=np.zeros((nv * n_occ, 0)),
     )
     if not result["converged"]:
-        raise SCFError("stability analysis did not converge")
+        raise StabilityNotConverged("stability analysis did not converge")
     return np.asarray(result["eigenvalues"], dtype=np.float64)
 
 
@@ -249,14 +242,12 @@ def rks(
             resources.append(mgrid)
             xc = XCIntPlan(handle, ao, mgrid, functional)
             resources.append(xc)
-            # VV10 on its own (usually coarser) grid, as in common practice (SG-1).
             nl = xc
             if xc.is_vv10 and nonlocal_grid is not None and nonlocal_grid != grid:
                 nl_grid = MolecularGrid(handle, symbols, xyz, nonlocal_grid)
                 resources.append(nl_grid)
                 nl = XCIntPlan(handle, ao, nl_grid, functional)
                 resources.append(nl)
-            # cuEST reports omega = -1 when there is no long-range exchange.
             omega = xc.lrc_omega if xc.lrc_exchange_scale != 0.0 else 0.0
             fractions = (xc.exchange_scale, xc.lrc_exchange_scale, omega)
         else:
@@ -295,7 +286,7 @@ def rks(
         if guess is not None:
             c = orthonormalize_guess(cupy.asarray(guess), s, n_occ)
         else:
-            eps, c = diagonalize(h)  # core guess
+            eps, c = diagonalize(h)
         e_nuc = nuclear_repulsion(xyz, z)
 
         def build_fock(
@@ -314,7 +305,7 @@ def rks(
                 e_nl, vnl = nl.rks_nonlocal_potential(c_rows)
                 fock = fock + vxc + vnl
             if pcm is not None:
-                pcm_result = pcm.potential(d, q_guess)  # raises PCMNotConverged
+                pcm_result = pcm.potential(d, q_guess)
                 q_out = pcm_result.charges
                 e_pcm = pcm_result.energy
                 fock = fock + pcm_result.potential

@@ -1,4 +1,4 @@
-"""HDF5 results with a JSON summary (spec §7 "Data rules").
+"""HDF5 results with a JSON summary.
 
 <name>.h5   provenance and summary as JSON attributes; arrays under /data,
             each with a 'units' attribute

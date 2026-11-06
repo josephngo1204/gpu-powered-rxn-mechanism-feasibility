@@ -1,4 +1,3 @@
-# Build and environment
 build/
 *.egg-info/
 __pycache__/
@@ -9,10 +8,8 @@ __pycache__/
 .coverage
 .hypothesis/
 
-# Results are ignored unless a release baseline (spec §10)
 results/*
 !results/mvp/
 runs/
 
-# Local Claude settings
-.claude/settings.local.json
+.claude/

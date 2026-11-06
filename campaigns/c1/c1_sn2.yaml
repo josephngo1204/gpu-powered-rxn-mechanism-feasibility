@@ -1,13 +1,9 @@
-# C1 (spec section 3): Cl- + CH3Cl identity SN2 in the gas phase.
-# Tests the surface, not the rate: trajectory studies found non-RRKM behaviour,
-# so the TST verdict is reported but C1 is judged on the double-well profile
-# (complex and TS energies vs CCSD(T), data/references.yaml).
 schema_version: 1
 hypothesis: c1_hypothesis.yaml
 model:
   type: cuest
-  functional: WB97X-V        # spec section 4 default
-  basis: def2-SVPD           # search profile
+  functional: WB97X-V
+  basis: def2-SVPD
   auxiliary_basis: def2-universal-jkfit
   grid: "(75,302)"
   math_mode: native-fp64

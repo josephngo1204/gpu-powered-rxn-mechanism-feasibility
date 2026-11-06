@@ -116,10 +116,8 @@ def test_verdict_carries_numbers_for_the_report() -> None:
 
 
 def test_rank_pair_resolution() -> None:
-    # OTs vs OMs: 0.15 kcal/mol gap must not be resolved (spec §3 C8).
     r = rank_pair(outcome("ots", 20.15, 0.4), outcome("oms", 20.0, 0.4))
     assert not r.resolved
-    # OTf vs OTs: 5.7 kcal/mol gap is a strong signal.
     r = rank_pair(outcome("otf", 14.45, 1.0), outcome("ots", 20.15, 1.0))
     assert r.resolved and r.lower == "otf"
     assert r.gap_kcal_mol == pytest.approx(5.7)

@@ -1,4 +1,4 @@
-"""saddle command-line interface (spec §10 "Commands")."""
+"""saddle command-line interface."""
 
 import argparse
 import json
@@ -147,7 +147,6 @@ def _find_runs(paths: Sequence[str]) -> list[Run]:
             raise CliError(f"{raw} is not a run directory")
     if not found:
         raise CliError("no campaign.json found under " + ", ".join(paths))
-    # Label runs by directory name; when names repeat, by path so they stay distinct.
     names = [d.name for d in found]
     labels = [str(d) if names.count(d.name) > 1 else d.name for d in found]
     return [
@@ -170,7 +169,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 
 
 def cmd_bench(args: argparse.Namespace) -> int:
-    raise CliError("benchmarks measure cuEST on a GPU and are not available until Phase F")
+    raise CliError("benchmarks measure cuEST on a GPU and are not implemented yet")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -217,7 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dash.set_defaults(func=cmd_dashboard)
 
-    bench = sub.add_parser("bench", help="cuEST performance benchmarks (Phase F)")
+    bench = sub.add_parser("bench", help="cuEST performance benchmarks (not implemented yet)")
     bench.add_argument("suite")
     bench.add_argument("--warm-jit", action="store_true")
     bench.add_argument("--out", default=None)

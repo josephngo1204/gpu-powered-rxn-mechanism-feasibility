@@ -19,7 +19,6 @@ constexpr double kHartreeToWavenumber = 219474.6313632;
 constexpr double kAmuToElectronMass = 1822.888486209;
 constexpr double kHydrogenMass = 1.00782503223;
 
-// Bent triatomic at a spring equilibrium (all springs at rest length).
 Geometry triangle() {
   Geometry g{{8, 1, 1}, Eigen::VectorXd(9)};
   g.coords << 0.0, 0.0, 0.0, 1.43, 1.11, 0.0, -1.43, 1.11, 0.0;
@@ -37,7 +36,7 @@ Springs triangle_springs(double k_hh) {
 
 const Eigen::Vector3d kWaterMasses(15.99491461957, kHydrogenMass, kHydrogenMass);
 
-}  // namespace
+}
 
 TEST(Springs, GradientMatchesFiniteDifference) {
   auto model = triangle_springs(0.1);
@@ -81,7 +80,6 @@ TEST(Vibrations, BentTriatomicHasThreeModesAndCleanProjection) {
   for (Eigen::Index i = 0; i < 3; ++i) EXPECT_GT(vib.frequencies_cm[i], 100.0);
   EXPECT_LT(vib.max_external_residual_cm, 5.0);
   EXPECT_LT(vib.translation_sum_rule, 1e-8);
-  // Frequencies are sorted ascending.
   EXPECT_LE(vib.frequencies_cm[0], vib.frequencies_cm[1]);
   EXPECT_LE(vib.frequencies_cm[1], vib.frequencies_cm[2]);
 }
@@ -108,7 +106,7 @@ TEST(Vibrations, UnprojectedTranslationalErrorIsReported) {
   auto model = triangle_springs(0.1);
   const auto g = triangle();
   Eigen::MatrixXd h = estimate_hessian(model, g, 1e-3).hessian;
-  h += 1e-3 * Eigen::MatrixXd::Identity(9, 9);  // breaks translation invariance
+  h += 1e-3 * Eigen::MatrixXd::Identity(9, 9);
   const auto vib = analyze_vibrations(h, g.coords, kWaterMasses);
   EXPECT_GT(vib.max_external_residual_cm, 5.0);
   EXPECT_GT(vib.translation_sum_rule, 1e-4);

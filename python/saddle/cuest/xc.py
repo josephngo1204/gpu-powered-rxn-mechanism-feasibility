@@ -1,4 +1,4 @@
-"""Exchange-correlation integral plans and RKS potentials (spec §4, §8).
+"""Exchange-correlation integral plans and RKS potentials.
 
 The functional's exact-exchange fractions and VV10 parameters are read back
 from the cuEST plan, never hard-coded, so the DF exchange always matches the
@@ -49,7 +49,6 @@ FUNCTIONALS = {
     "B97M-V": F.CUEST_XCINTPLAN_PARAMETERS_FUNCTIONAL_B97MV,
 }
 
-# Scratch for XC and VV10 kernels; NVIDIA suggests about 2 GB.
 DEFAULT_XC_BUFFER_BYTES = 2 << 30
 
 

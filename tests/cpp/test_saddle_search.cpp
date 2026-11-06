@@ -26,13 +26,12 @@ Springs triangle_ts() {
 
 Geometry distorted_triangle() {
   Geometry g{{8, 1, 1}, Eigen::VectorXd(9)};
-  // Rest geometry: |01| = |02| = 1.8, |12| = 2.9; perturbed.
   const double half = 1.45, h = std::sqrt(1.8 * 1.8 - half * half);
   g.coords << 0.0, 0.0, 0.0, half + 0.08, h - 0.05, 0.02, -half, h + 0.04, -0.03;
   return g;
 }
 
-}  // namespace
+}
 
 TEST(Bofill, SatisfiesSecantConditionAndSymmetry) {
   Eigen::MatrixXd h(3, 3);
@@ -47,7 +46,7 @@ TEST(Bofill, SatisfiesSecantConditionAndSymmetry) {
 TEST(Bofill, CanCreateNegativeCurvature) {
   const Eigen::MatrixXd h = Eigen::MatrixXd::Identity(2, 2);
   const Eigen::Vector2d s(0.1, 0.0);
-  const Eigen::Vector2d y(-0.1, 0.0);  // negative curvature along s
+  const Eigen::Vector2d y(-0.1, 0.0);
   EXPECT_EQ(negative_eigenvalues(bofill_update(h, s, y)), 1);
 }
 
@@ -96,7 +95,7 @@ TEST(SaddleSearch, FollowsRequestedDirection) {
 TEST(SaddleSearch, OverlapThresholdTriggersHessianRecompute) {
   MullerBrown mb;
   SaddleOptions opt;
-  opt.mode_overlap_threshold = 1.01;  // unattainable: recompute every iteration
+  opt.mode_overlap_threshold = 1.01;
   opt.max_hessian_recomputes = 3;
   const auto r = saddle_search(mb, Geometry::cartesian({0.25, 0.25}), opt);
   EXPECT_EQ(r.n_hessians, 1 + 3);
@@ -117,13 +116,13 @@ TEST(PrfoStep, RespectsTrustAndClimbsAlongChosenMode) {
   const Eigen::Vector2d g(0.1, 0.1);
   const auto step = rs_prfo_step(h, g, 0.05, 0);
   EXPECT_LE(step.step.norm(), 0.05 + 1e-12);
-  EXPECT_GT(step.step[0], 0.0);  // uphill along mode 0 despite positive curvature
-  EXPECT_LT(step.step[1], 0.0);  // downhill along mode 1
+  EXPECT_GT(step.step[0], 0.0);
+  EXPECT_LT(step.step[1], 0.0);
 }
 
 TEST(ModeTracking, PicksTheMostParallelModeIgnoringSign) {
   Eigen::MatrixXd modes = Eigen::MatrixXd::Identity(3, 3);
-  const Eigen::Vector3d tracked(0.1, -0.9, 0.2);  // mostly along -y
+  const Eigen::Vector3d tracked(0.1, -0.9, 0.2);
   const auto choice = detail::best_overlap_mode(tracked, modes);
   EXPECT_EQ(choice.index, 1);
   EXPECT_NEAR(choice.overlap, 0.9 / tracked.norm(), 1e-12);

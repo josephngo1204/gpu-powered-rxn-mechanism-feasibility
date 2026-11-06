@@ -14,14 +14,11 @@ from saddle.dashboard.explain import duration, safe_half_life_s, verdict_status
 from saddle.dashboard.svg import RowChart, Svg, esc, linear_scale, nice_ticks
 from saddle.dashboard.views import Campaign, Pathway
 
-MAX_SERIES = 3  # categorical color slots validated all-pairs in light and dark
+MAX_SERIES = 3
 
 
 def _empty(message: str) -> str:
     return f'<p class="muted">{message}</p>'
-
-
-# --------------------------------------------------------------------------- barrier
 
 
 def barrier_chart(rows: Sequence[tuple[str, Pathway]]) -> str:
@@ -60,9 +57,6 @@ def barrier_chart(rows: Sequence[tuple[str, Pathway]]) -> str:
     return svg.render()
 
 
-# --------------------------------------------------------------------------- half-life
-
-# Landmarks for the log-time axis: (seconds, label).
 _TIME_LANDMARKS = (
     (1e-12, "1 ps"),
     (1e-9, "1 ns"),
@@ -76,7 +70,7 @@ _TIME_LANDMARKS = (
     (3.15576e13, "1 Myr"),
     (3.15576e16, "1 Gyr"),
 )
-_LOG_T_MIN, _LOG_T_MAX = -13.0, 18.0  # clamp: 0.1 ps .. ~3 Gyr
+_LOG_T_MIN, _LOG_T_MAX = -13.0, 18.0
 
 
 @dataclass(frozen=True)
@@ -158,8 +152,6 @@ def half_life_chart(rows: Sequence[HalfLifeRow]) -> str:
     return svg.render()
 
 
-# --------------------------------------------------------------------------- energy profile
-
 PROFILE_STAGES = (
     "Separated reactants",
     "Minimum before the TS",
@@ -204,7 +196,6 @@ def energy_profile_chart(c: Campaign) -> str:
     svg.text(left - 50, 14, "energy (kcal/mol)", "tick")
 
     if len(shown) == 1 and shown[0].electronic_barrier is not None:
-        # Bracket from the reactant level up to the TS: "how high is the hill".
         bx, top_y = sx(2) + 16, sy(shown[0].electronic_barrier)
         svg.line(bx, sy(0), bx, top_y, "bracket")
         svg.line(bx - 4, sy(0), bx + 4, sy(0), "bracket")
@@ -223,7 +214,6 @@ def energy_profile_chart(c: Campaign) -> str:
             svg.circle(sx(i), sy(v), 12, "hitbox")
             svg.circle(sx(i), sy(v), 4.5, f"dot {slot}")
             svg.end_hover()
-        # Direct label at the line's end, nudged down past earlier labels.
         i_end, v_end = pts[-1]
         y = sy(v_end) + 4
         while any(abs(y - other) < 14 for other in label_ys):
@@ -237,9 +227,6 @@ def energy_profile_chart(c: Campaign) -> str:
         svg.rect(sx(i) - 5, sy(v) - 5, 10, 10, "ref")
         svg.end_hover()
     return svg.render()
-
-
-# --------------------------------------------------------------------------- per pathway
 
 
 def budget_chart(p: Pathway) -> str:
@@ -258,7 +245,7 @@ def budget_chart(p: Pathway) -> str:
             svg, i, t.component, f"{t.component}: {t.value:.3g} ({t.source}) {t.note}"
         )
         w = max(sx(t.value) - chart.left, 0.0)
-        r = min(4.0, w / 2)  # rounded data end, square at the baseline
+        r = min(4.0, w / 2)
         svg.raw(
             f'<path class="bar s1" d="M{chart.left},{y - 8:.1f} h{w - r:.2f} '
             f"a{r:.2f},{r:.2f} 0 0 1 {r:.2f},{r:.2f} v{16 - 2 * r:.2f} "

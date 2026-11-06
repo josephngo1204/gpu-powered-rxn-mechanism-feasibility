@@ -35,7 +35,7 @@ def _sequence(x: Any) -> Sequence[Any]:
 
 @dataclass(frozen=True)
 class Gate:
-    code: str  # "G1" .. "G8"
+    code: str
     name: str
     passed: bool
     reason: str
@@ -48,7 +48,7 @@ class Term:
 
     component: str
     value: float | None
-    source: str  # measured | estimate | qualitative | missing
+    source: str
     note: str
 
 
@@ -66,11 +66,11 @@ class Pathway:
     name: str
     verdict: str
     reason: str
-    barrier: float | None  # free-energy barrier, kcal/mol
+    barrier: float | None
     sigma: float | None
     limit: float | None
     electronic_barrier: float | None
-    reactant_minimum: float | None  # IRC endpoint minima vs separated reactants
+    reactant_minimum: float | None
     product_minimum: float | None
     imaginary_cm: float | None
     noise_epsilon: float | None
@@ -151,10 +151,10 @@ class Reference:
     """Literature values for one campaign, from ``data/references.yaml``."""
 
     citation: str
-    complex_energy: float | None  # kcal/mol vs separated reactants
+    complex_energy: float | None
     ts_energy: float | None
     barrier: float | None
-    pathway: str | None  # which pathway the values describe, when not the only one
+    pathway: str | None
 
     @classmethod
     def from_yaml(cls, doc: Mapping[str, Any]) -> Reference:
@@ -179,9 +179,9 @@ class Ranking:
 @dataclass(frozen=True)
 class Campaign:
     label: str
-    anchor: str  # unique HTML id
+    anchor: str
     hypothesis: str
-    model: str  # one-line level of theory
+    model: str
     temperature_k: float | None
     target_half_life_s: float | None
     limit: float | None

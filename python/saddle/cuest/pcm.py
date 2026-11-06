@@ -1,4 +1,4 @@
-"""PCM plan and potential (spec §8 hazard: PCM can return success unconverged).
+"""PCM plan and potential.
 
 Every call reads the results object and raises PCMNotConverged when the
 charges did not converge, so a false success never reaches the SCF.
@@ -24,7 +24,7 @@ from saddle.cuest.core import (
     run_with_workspace,
 )
 from saddle.cuest.oei import OEIntPlan
-from saddle.errors import PCMNotConverged as PCMNotConverged  # re-export
+from saddle.errors import PCMNotConverged as PCMNotConverged
 from saddle.solvation import ZETA, PCMModel
 
 P = cb.CuestParametersType
@@ -32,9 +32,9 @@ P = cb.CuestParametersType
 
 @dataclass
 class PCMResult:
-    energy: float  # dielectric energy, Eh
-    potential: Any  # cupy (nao, nao)
-    charges: Any  # cupy (npoint,)
+    energy: float
+    potential: Any
+    charges: Any
     converged: bool
     residual: float
     iterations: int

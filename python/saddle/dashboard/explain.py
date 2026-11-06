@@ -27,7 +27,6 @@ VERDICT_MEANING = {
     "BARRIERLESS_CANDIDATE": "no barrier was found; the step may happen without one",
 }
 
-# (seconds, singular unit name), smallest first.
 _UNITS = (
     (1e-12, "picosecond"),
     (1e-9, "nanosecond"),
@@ -76,7 +75,6 @@ def headline(p: Pathway, temperature_k: float | None, target_s: float | None) ->
     return f"{sentence}, so {meaning}."
 
 
-# Verdict -> (status color role, icon). Status always ships with icon + word.
 _VERDICT_STATUS = {
     "SUPPORTED": ("good", "✓"),
     "OUTCOMPETED": ("warning", "↓"),

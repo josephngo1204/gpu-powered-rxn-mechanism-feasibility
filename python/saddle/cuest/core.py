@@ -1,4 +1,4 @@
-"""cuEST adapter core: status checks, lifetimes, workspaces, device buffers (spec §8).
+"""cuEST adapter core: status checks, lifetimes, workspaces, device buffers.
 
 Hazards handled here:
 - every status is checked and mapped to CuestError;
@@ -90,7 +90,7 @@ class Parameters:
 
 
 class Handle:
-    """One cuEST handle. Handles never cross processes (spec §9)."""
+    """One cuEST handle. Handles never cross processes."""
 
     def __init__(self, math_mode: MathMode = MathMode.NATIVE_FP64) -> None:
         self._raw = cb.cuestHandle()
@@ -242,7 +242,7 @@ def run_with_workspace(
     """Query the temporary workspace, allocate it, and compute, as one operation.
 
     The query and the compute receive identical arguments, which keeps the
-    buffer sizes unchanged between them (the XC hazard in spec §8). On any
+    buffer sizes unchanged between them (the XC hazard). On any
     failure the outputs are overwritten with NaN before raising.
     """
     descriptor = WorkspaceDescriptor()
@@ -263,7 +263,7 @@ def run_with_workspace(
 
 
 class AOShell:
-    """One AO shell. Contraction coefficients must arrive normalized (spec §8)."""
+    """One AO shell. Contraction coefficients must arrive normalized."""
 
     def __init__(
         self,

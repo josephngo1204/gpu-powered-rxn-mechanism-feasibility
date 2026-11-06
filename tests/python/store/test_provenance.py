@@ -37,7 +37,7 @@ def record(**override: object) -> Provenance:
     return Provenance(**fields)  # type: ignore[arg-type]
 
 
-def test_record_covers_every_spec_section_7_field() -> None:
+def test_record_covers_every_provenance_field() -> None:
     names = {f.name for f in dataclasses.fields(Provenance)}
     assert set(SPEC_FIELDS) <= names
     for required in (

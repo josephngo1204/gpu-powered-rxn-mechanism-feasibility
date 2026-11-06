@@ -1,10 +1,10 @@
-"""CuestModel: the real ElectronicModel (spec §7) behind evaluate(coords).
+"""CuestModel: the real ElectronicModel behind evaluate(coords).
 
-It owns one cuEST handle (one worker process per GPU, spec §9), runs RHF or
+It owns one cuEST handle (one worker process per GPU), runs RHF or
 RKS with an analytic gradient, warm-starts from the previous orbitals, and
-records SCF diagnostics for gate G2 and the timing measurements of spec §9.
+records SCF diagnostics for gate G2 and per-evaluation timings.
 Plans are rebuilt for every geometry because pair lists, DF plans and grids
-capture coordinates (spec §2, §16 Q3).
+capture coordinates.
 """
 
 import time
@@ -24,8 +24,6 @@ from saddle.solvation import PCMModel
 
 FloatArray = npt.NDArray[np.float64]
 
-# Distance guard (spec §8: cuEST warns against far-from-equilibrium geometries
-# with severe roundoff). Searches that collapse atoms are stopped here.
 MIN_INTERATOMIC_BOHR = 0.5
 
 
@@ -45,15 +43,12 @@ def check_geometry(coords_bohr: npt.ArrayLike) -> None:
 
 @dataclass(frozen=True)
 class LevelOfTheory:
-    """One spec §4 profile: method, basis, auxiliary basis, grid, thresholds, math mode."""
+    """One level-of-theory profile: method, basis, auxiliary basis, grid, thresholds, math mode."""
 
-    functional: str | None  # None = HF
+    functional: str | None
     basis: str
     auxiliary_basis: str = "def2-universal-jkfit"
     grid: str | None = "(99,590)"
-    # VV10 grid. PROPOSED default ~SG-1 size (spec gives none; ADR 0002):
-    # wB97X-V was parameterized with VV10 on SG-1, and VV10 cost grows with
-    # the square of the grid (12 s vs 2 s per gradient for HCN at (99,590)).
     nonlocal_grid: str | None = "(50,194)"
     threshold_pq: float = 1e-14
     orbital_gradient: float = 1e-8

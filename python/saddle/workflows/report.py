@@ -1,4 +1,4 @@
-"""Markdown report (spec §5, §6, §12).
+"""Markdown report.
 
 Every barrier summary shows its uncertainty and any failed gates, and the
 report shows how step size and the robustness variants move each barrier.

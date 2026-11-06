@@ -1,4 +1,4 @@
-"""Kinetic isotope effects from isotopic rediagonalization (spec §4).
+"""Kinetic isotope effects from isotopic rediagonalization.
 
 The same Cartesian Hessian is rediagonalized with substituted masses; no new
 electronic-structure work is needed. The ratio uses full RRHO partition
@@ -19,13 +19,12 @@ from saddle.analysis import thermo, tunneling
 
 FloatArray = npt.NDArray[np.float64]
 
-# Modes with |frequency| below this are treated as numerical zeros and rejected.
 ZERO_MODE_CM = 1.0
 
 
 @dataclass(frozen=True)
 class IsotopologuePair:
-    hessian: FloatArray  # Cartesian, Eh/bohr^2
+    hessian: FloatArray
     coords_bohr: FloatArray
     masses_light: FloatArray
     masses_heavy: FloatArray
@@ -36,7 +35,7 @@ class IsotopologuePair:
 
 @dataclass(frozen=True)
 class IsotopeEffect:
-    kie: float  # k_light / k_heavy, TST without tunneling
+    kie: float
     kie_with_wigner: float
     ts_imaginary_light_cm: float
     ts_imaginary_heavy_cm: float

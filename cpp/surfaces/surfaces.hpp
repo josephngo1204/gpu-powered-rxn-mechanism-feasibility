@@ -9,14 +9,11 @@
 
 namespace saddle::surfaces {
 
-// Müller-Brown two-dimensional potential (standard parameters).
 class MullerBrown {
  public:
   [[nodiscard]] Evaluation evaluate(const Geometry& geometry, const WarmStart& guess) const;
 };
 
-// Morse potential between atoms 0 and 1 of a two-atom Cartesian geometry:
-// E = D * (1 - exp(-a (r - re)))^2.
 class Morse {
  public:
   Morse(double depth, double alpha, double r_eq);
@@ -28,8 +25,6 @@ class Morse {
   double r_eq_;
 };
 
-// Quadratic surface E = 1/2 (x - x0)^T K (x - x0). K may be indefinite, which
-// makes it a saddle of any order.
 class Harmonic {
  public:
   Harmonic(Eigen::VectorXd center, Eigen::MatrixXd force_constants);
@@ -41,9 +36,6 @@ class Harmonic {
   Eigen::MatrixXd k_;
 };
 
-// Pairwise harmonic springs E = sum 1/2 k (r_ij - r0)^2 on a Cartesian
-// geometry. Translation and rotation invariant, so it exercises projection.
-// A negative k makes that stretch a saddle direction.
 struct Spring {
   int i;
   int j;
@@ -61,7 +53,6 @@ class Springs {
   int n_atoms_ = 0;
 };
 
-// Morse bond between atoms i and j: D (1 - exp(-a (r - re)))^2 - D.
 struct MorseBond {
   int i;
   int j;
@@ -70,9 +61,6 @@ struct MorseBond {
   double r_eq;
 };
 
-// Sum of harmonic springs and Morse bonds on a Cartesian geometry. With two
-// Morse bonds to a transferring atom and a spring holding the donor and
-// acceptor apart, it is a bounded molecular double well with a real saddle.
 class PairModel {
  public:
   PairModel(std::vector<Spring> springs, std::vector<MorseBond> morse);
@@ -85,14 +73,10 @@ class PairModel {
 };
 
 namespace detail {
-// Deterministic Gaussian noise keyed on geometry bits, seed and component.
 [[nodiscard]] Eigen::VectorXd geometry_noise(const Eigen::VectorXd& coords, double amplitude,
                                              std::uint64_t seed);
-}  // namespace detail
+}
 
-// Adds reproducible Gaussian gradient noise with the given RMS amplitude.
-// The same geometry always gets the same noise, like a converged but
-// imperfect electronic-structure code.
 template <ElectronicModel Inner>
 class Noisy {
  public:
@@ -111,8 +95,6 @@ class Noisy {
   std::uint64_t seed_;
 };
 
-// Adds an energy step when one coordinate crosses a threshold, mimicking a
-// basis-rank or screening discontinuity.
 template <ElectronicModel Inner>
 class Discontinuous {
  public:
@@ -132,4 +114,4 @@ class Discontinuous {
   double jump_;
 };
 
-}  // namespace saddle::surfaces
+}

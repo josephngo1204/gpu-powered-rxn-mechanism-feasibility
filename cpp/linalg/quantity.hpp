@@ -4,8 +4,6 @@
 
 namespace saddle {
 
-// A double tagged with its physical unit. Different tags never mix, and raw
-// doubles must be wrapped explicitly. Internal units are bohr and hartree.
 template <class Tag>
 class Quantity {
  public:
@@ -53,12 +51,11 @@ using Bohr = Quantity<BohrTag>;
 using Hartree = Quantity<HartreeTag>;
 using HartreePerBohr = Quantity<HartreePerBohrTag>;
 
-inline constexpr double kBohrToAngstrom = 0.529177210903;  // CODATA 2018
+inline constexpr double kBohrToAngstrom = 0.529177210903;
 
-// Boundary conversions only.
 [[nodiscard]] constexpr double to_angstrom(Bohr x) noexcept { return x.value() * kBohrToAngstrom; }
 [[nodiscard]] constexpr Bohr bohr_from_angstrom(double angstrom) noexcept {
   return Bohr{angstrom / kBohrToAngstrom};
 }
 
-}  // namespace saddle
+}

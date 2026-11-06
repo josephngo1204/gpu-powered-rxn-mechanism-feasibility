@@ -1,4 +1,4 @@
-"""Restartable finite-difference Hessian execution (spec §6, §9, §14).
+"""Restartable finite-difference Hessian execution.
 
 Each stencil point is stored as soon as its gradient is available, keyed by
 geometry hash and settings. A rerun after an interruption reuses finished

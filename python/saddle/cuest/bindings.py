@@ -1,4 +1,4 @@
-"""The single import point for the cuEST Python bindings (spec §14, ADR 0001).
+"""The single import point for the cuEST Python bindings.
 
 No other Saddle module may import `cuest`; they use `saddle.cuest.bindings.cb`.
 """

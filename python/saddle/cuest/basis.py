@@ -35,7 +35,6 @@ def _query_uint(handle: Handle, kind: Any, obj: Any, attribute: Any) -> int:
 
 
 def _query_flag(handle: Handle, kind: Any, obj: Any, attribute: Any) -> bool:
-    # cuEST stores flags such as IS_PURE as int32 (probed: data_bool is INVALID_TYPE).
     return bool(_query(handle, kind, obj, attribute, cb.data_int32_t()))
 
 
@@ -124,7 +123,7 @@ class AOBasis:
 
 
 class PairList:
-    """Screened AO pair list. It captures coordinates, so each geometry needs its own (spec §2)."""
+    """Screened AO pair list. It captures coordinates, so each geometry needs its own."""
 
     def __init__(
         self, handle: Handle, basis: AOBasis, coords_bohr: npt.ArrayLike, *, threshold_pq: float

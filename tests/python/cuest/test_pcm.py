@@ -43,7 +43,7 @@ def _pyscf_cpcm() -> float:
     mf = scf.RHF(mol).density_fit(auxbasis="def2-universal-jkfit").PCM()
     mf.with_solvent.method = "C-PCM"
     mf.with_solvent.eps = 78.3553
-    mf.with_solvent.lebedev_order = 29  # 302 points
+    mf.with_solvent.lebedev_order = 29
     mf.conv_tol = 1e-11
     return float(mf.kernel())
 
@@ -62,7 +62,7 @@ def solvated() -> object:
 
 
 def test_cpcm_rhf_matches_pyscf(solvated) -> None:  # type: ignore[no-untyped-def]
-    """SwiG discretization differs slightly between the codes (docs/adr/0004).
+    """SwiG discretization differs slightly between the codes.
 
     On a fixed density the dielectric energies differ by 7.8e-6 Eh (0.08%,
     0.005 kcal/mol); the SCF energies by ~1e-5 Eh.

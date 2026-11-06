@@ -1,4 +1,4 @@
-"""Only saddle.cuest may import cuEST (spec §14 as amended by ADR 0001)."""
+"""Only saddle.cuest may import cuEST."""
 
 import ast
 from pathlib import Path
@@ -24,7 +24,7 @@ def test_only_the_adapter_imports_cuest() -> None:
 
 
 def test_cpu_layers_import_without_cupy_or_cuest() -> None:
-    """Spec §14: a clean checkout passes all non-GPU tests, so the workflow,
+    """A clean checkout passes all non-GPU tests, so the workflow,
     gate and CLI layers must not import cupy/cuest at module load."""
     import subprocess
     import sys

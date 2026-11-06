@@ -61,4 +61,4 @@ def test_gpu_flags_rejected_for_fake_models(
 
 def test_bench_explains_phase_f(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["bench", "benchmarks/hessian_suite.yaml"]) == 2
-    assert "Phase F" in capsys.readouterr().err
+    assert "not implemented" in capsys.readouterr().err

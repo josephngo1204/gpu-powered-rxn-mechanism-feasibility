@@ -1,4 +1,4 @@
-"""Mechanism hypothesis input: versioned YAML, validated at the boundary (spec §7, §12).
+"""Mechanism hypothesis input: versioned YAML, validated at the boundary.
 
 Coordinates are read in angstrom and stored in bohr. Atom maps are mandatory
 because gates G5 and G6 depend on them.
@@ -29,7 +29,7 @@ class HypothesisError(ValueError):
 class Species:
     name: str
     symbols: tuple[str, ...]
-    coords_bohr: npt.NDArray[np.float64]  # shape (n_atoms, 3)
+    coords_bohr: npt.NDArray[np.float64]
     atom_map: tuple[int, ...]
     charge: int
 
@@ -77,7 +77,7 @@ def _require(raw: Mapping[str, Any], key: str, where: str) -> Any:
     return raw[key]
 
 
-def _read_xyz(path: Path, where: str) -> tuple[tuple[str, ...], npt.NDArray[np.float64]]:
+def read_xyz(path: Path, where: str) -> tuple[tuple[str, ...], npt.NDArray[np.float64]]:
     try:
         lines = path.read_text().splitlines()
         n = int(lines[0].split()[0])
@@ -112,7 +112,7 @@ def _check_geometry(name: str, coords_bohr: npt.NDArray[np.float64]) -> None:
 def _parse_species(raw: Mapping[str, Any], base_dir: Path) -> Species:
     name = str(_require(raw, "name", "reactant"))
     where = f"reactant '{name}'"
-    symbols, coords = _read_xyz(base_dir / str(_require(raw, "xyz", where)), where)
+    symbols, coords = read_xyz(base_dir / str(_require(raw, "xyz", where)), where)
     if "atom_map" not in raw:
         raise HypothesisError(f"{where}: atom_map is mandatory")
     atom_map = tuple(int(i) for i in raw["atom_map"])

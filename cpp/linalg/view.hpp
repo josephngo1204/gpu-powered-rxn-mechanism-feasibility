@@ -14,14 +14,12 @@ class ShapeError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-// Non-owning row-major matrix view that always carries its extents.
 template <class T>
 class MatrixView {
  public:
   MatrixView(T* data, std::size_t rows, std::size_t cols) noexcept
       : data_(data), rows_(rows), cols_(cols) {}
 
-  // A view of non-const T converts to a view of const T.
   template <class U>
     requires std::is_same_v<T, const U>
   MatrixView(MatrixView<U> other) noexcept  // NOLINT(google-explicit-constructor)
@@ -59,7 +57,6 @@ void require_shape(const MatrixView<T>& view, std::size_t rows, std::size_t cols
   }
 }
 
-// Build a view over owned storage, checking that the storage is large enough.
 template <class T>
 [[nodiscard]] MatrixView<T> make_matrix_view(std::vector<T>& storage, std::size_t rows,
                                              std::size_t cols) {
@@ -70,4 +67,4 @@ template <class T>
   return MatrixView<T>(storage.data(), rows, cols);
 }
 
-}  // namespace saddle
+}

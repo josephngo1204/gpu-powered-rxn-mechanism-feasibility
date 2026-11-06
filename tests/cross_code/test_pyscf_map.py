@@ -15,7 +15,6 @@ from saddle.cuest.oei import OEIntPlan
 
 pytestmark = pytest.mark.gpu
 
-# Methyl chloride: s, p and d shells on C and Cl.
 SYMBOLS = ["C", "Cl", "H", "H", "H"]
 XYZ = (
     np.array(

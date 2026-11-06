@@ -16,8 +16,6 @@ def atomic_number(symbol: str) -> int:
     return ATOMIC_NUMBER[symbol.capitalize()]
 
 
-# Most abundant isotope masses (amu), AME2020. Covers the chemistry in scope;
-# extend with a citation before adding elements.
 ISOTOPE_MASS: Final[dict[str, float]] = {
     "H": 1.00782503223,
     "D": 2.01410177812,

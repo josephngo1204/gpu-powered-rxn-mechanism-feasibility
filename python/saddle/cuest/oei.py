@@ -1,4 +1,4 @@
-"""One-electron integral plan: overlap, kinetic and nuclear attraction (spec §8)."""
+"""One-electron integral plan: overlap, kinetic and nuclear attraction."""
 
 from typing import Any
 

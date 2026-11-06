@@ -39,7 +39,6 @@ def test_rejects_nonpositive_temperature() -> None:
 
 
 def test_energetic_span_linear_picks_ts_after_lowest_prior_intermediate() -> None:
-    # R(0) -> TS1(10) -> I(-5) -> TS2(12) -> P(-20)
     states = [
         kinetics.State("R", 0.0, is_ts=False),
         kinetics.State("TS1", 10.0, is_ts=True),
@@ -54,7 +53,6 @@ def test_energetic_span_linear_picks_ts_after_lowest_prior_intermediate() -> Non
 
 
 def test_energetic_span_cycle_adds_reaction_energy_when_ts_precedes_intermediate() -> None:
-    # Kozuch-Shaik: when a TS precedes an intermediate, the reaction energy is added.
     states = [
         kinetics.State("I1", 0.0, is_ts=False),
         kinetics.State("TS1", 20.0, is_ts=True),
@@ -62,7 +60,6 @@ def test_energetic_span_cycle_adds_reaction_energy_when_ts_precedes_intermediate
         kinetics.State("TS2", 8.0, is_ts=True),
     ]
     span = kinetics.energetic_span(states, reaction_energy=-10.0)
-    # candidates: TS1-I1=20, TS2-I1=8, TS2-I2=13, TS1-I2+dGr=15
     assert span.value == pytest.approx(20.0)
     assert (span.tdts, span.tdi) == ("TS1", "I1")
 

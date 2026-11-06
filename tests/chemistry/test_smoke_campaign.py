@@ -1,4 +1,4 @@
-"""End-to-end real-DFT campaign: HCN -> HNC (spec pipeline on cuEST)."""
+"""End-to-end real-DFT campaign: HCN -> HNC (full pipeline on cuEST)."""
 
 from pathlib import Path
 

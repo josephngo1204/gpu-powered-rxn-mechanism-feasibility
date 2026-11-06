@@ -50,9 +50,7 @@ TEST(EstimateHessian, MullerBrownMatchesAnalyticSecondDerivative) {
   const auto g = Geometry::cartesian({0.212487, 0.292988});
   const auto coarse = estimate_hessian(mb, g, 1e-3);
   const auto fine = estimate_hessian(mb, g, 1e-5);
-  // Central differences are O(h^2): coarse and fine agree to ~h^2 * |g'''|.
   EXPECT_LT((coarse.hessian - fine.hessian).norm(), 1e-1);
-  // The Muller-Brown saddle has one negative eigenvalue.
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(fine.hessian);
   EXPECT_LT(es.eigenvalues()[0], 0.0);
   EXPECT_GT(es.eigenvalues()[1], 0.0);

@@ -1,4 +1,4 @@
-"""Conformer ensembles (spec §4): Boltzmann weights and ensemble free energy."""
+"""Conformer ensembles: Boltzmann weights and ensemble free energy."""
 
 from dataclasses import dataclass
 
@@ -13,7 +13,7 @@ FloatArray = npt.NDArray[np.float64]
 @dataclass(frozen=True)
 class Ensemble:
     weights: FloatArray
-    free_energy: float  # hartree, -RT ln sum g_i exp(-G_i/RT)
+    free_energy: float
     lowest_index: int
 
 

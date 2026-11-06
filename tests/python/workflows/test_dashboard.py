@@ -80,7 +80,7 @@ def test_dashboard_shows_every_pathway_verdict_and_gate_failure() -> None:
     assert html.startswith("<!DOCTYPE html>")
     for text in ("fake / a", "fake / b", "SUPPORTED", "INFEASIBLE", "a is lower", "re-search"):
         assert text in html
-    assert html.count("<svg") >= 5  # overview + profile + per-pathway charts
+    assert html.count("<svg") >= 5
 
 
 def test_dashboard_survives_pathway_without_barrier() -> None:
@@ -103,7 +103,7 @@ def test_reference_overlay_matches_hypothesis_id() -> None:
     html = render_dashboard([Run("c9", doc)], refs)
     assert "Against reference" in html
     assert 'class="ref"' in html
-    assert "-0.50" in html  # TS 9.0 computed vs 9.5 reference
+    assert "-0.50" in html
 
 
 def test_cli_dashboard_discovers_runs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -119,9 +119,6 @@ def test_cli_dashboard_discovers_runs(tmp_path: Path, capsys: pytest.CaptureFixt
 
 def test_cli_dashboard_rejects_empty_dir(tmp_path: Path) -> None:
     assert main(["dashboard", str(tmp_path), "--out", str(tmp_path / "d.html")]) == 2
-
-
-# --- behaviors pinned after mutation testing ------------------------------------------
 
 
 def _view(barrier: float | None, verdict: str = "SUPPORTED", limit: float = 22.52) -> Pathway:
@@ -141,12 +138,12 @@ def test_verdict_badges_carry_their_status() -> None:
 
 
 def test_barrier_chart_geometry_whisker_dot_and_limit() -> None:
-    svg = charts.barrier_chart([("a", _view(10.0))])  # 2 sigma = 1.0
+    svg = charts.barrier_chart([("a", _view(10.0))])
     dot = _attr(svg, "dot s1", "cx")
     left, right = _attr(svg, "whisker", "x1"), _attr(svg, "whisker", "x2")
     limit = _attr(svg, "limit", "x1")
     assert left < dot < right and math.isclose(dot - left, right - dot, rel_tol=1e-3)
-    assert limit > right  # 10 + 2 sigma is well below the 22.5 limit
+    assert limit > right
 
 
 def test_barrier_chart_whisker_widens_with_sigma() -> None:
@@ -171,7 +168,7 @@ def test_reference_is_compared_only_with_the_pathway_it_describes() -> None:
     named = {"c9_test": {"citation": "r", "ts_kcal_mol": 7.0, "pathway": "b"}}
     html = render_dashboard([Run("c9", doc)], named)
     assert "Against reference (b)" in html
-    assert "<td>11.00</td><td>7.00</td><td>4.00</td>" in html  # b: TS 9 + 2 vs 7
+    assert "<td>11.00</td><td>7.00</td><td>4.00</td>" in html
 
 
 def test_half_life_chart_places_a_fast_reaction_before_its_target() -> None:
@@ -180,7 +177,7 @@ def test_half_life_chart_places_a_fast_reaction_before_its_target() -> None:
     dot = _attr(svg, "dot s1", "cx")
     band_left = _attr(svg, "band-s1", "x")
     band_right = band_left + _attr(svg, "band-s1", "width")
-    assert band_left < dot < band_right  # central estimate inside its ±2σ range
+    assert band_left < dot < band_right
     assert dot < _attr(svg, "limit", "x1")
 
 

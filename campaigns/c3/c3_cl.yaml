@@ -1,12 +1,9 @@
-# C3 (spec section 3): Cl- + CH3CH2Cl, SN2 vs anti-E2 vs syn-E2, gas phase.
-# Judged on the TS energy order against CCSD(T) (data/references.yaml c3_ccsdt_ts);
-# geometries from build_guesses.py.
 schema_version: 1
 hypothesis: c3_cl_hypothesis.yaml
 model:
   type: cuest
-  functional: WB97X-V        # spec section 4 default
-  basis: def2-SVPD           # anions: diffuse functions
+  functional: WB97X-V
+  basis: def2-SVPD
   auxiliary_basis: def2-universal-jkfit
   grid: "(75,302)"
   math_mode: native-fp64
@@ -14,7 +11,7 @@ pathways:
   sn2: {ts_guess: species/ts_sn2_cl.xyz}
   anti_e2: {ts_guess: species/ts_anti_e2_cl.xyz}
   syn_e2: {ts_guess: species/ts_syn_e2_cl.xyz}
-symmetry_numbers: {nucleophile: 1, ethyl_halide: 1, ts: 1}   # all TSs are Cs
+symmetry_numbers: {nucleophile: 1, ethyl_halide: 1, ts: 1}
 quasi_harmonic: true
 uncertainty:
   basis: {value: 1.0, source: estimate, note: "def2-SVPD search profile; def2-TZVPD single points pending"}

@@ -12,7 +12,6 @@ namespace saddle::hess {
 enum class Stencil { Central, FivePoint };
 
 namespace detail {
-// Gradient at reference + t * v.
 template <ElectronicModel Model>
 Eigen::VectorXd gradient_along(Model& model, const Geometry& reference, const Eigen::VectorXd& v,
                                double t) {
@@ -20,18 +19,14 @@ Eigen::VectorXd gradient_along(Model& model, const Geometry& reference, const Ei
   g.coords += t * v;
   return model.evaluate(g, WarmStart{}).gradient;
 }
-}  // namespace detail
+}
 
 struct DirectionalResult {
-  Eigen::VectorXd hessian_vector;  // H v for unit v
-  double curvature;                // v^T H v
+  Eigen::VectorXd hessian_vector;
+  double curvature;
   int n_gradients;
 };
 
-// H v by differences of gradients along unit direction v.
-//   Central:   [g(x+hv) - g(x-hv)] / 2h                         O(h^2), 2 gradients
-//   FivePoint: [-g(x+2hv) + 8g(x+hv) - 8g(x-hv) + g(x-2hv)] / 12h  O(h^4), 4 gradients
-// FivePoint equals Richardson extrapolation of central differences at h and 2h.
 template <ElectronicModel Model>
 [[nodiscard]] DirectionalResult directional_curvature(Model& model, const Geometry& reference,
                                                       const Eigen::VectorXd& direction, double step,
@@ -59,14 +54,12 @@ template <ElectronicModel Model>
 }
 
 struct RefinedMode {
-  double central;                // v^T H v from central differences
-  double refined;                // five-point (Richardson) estimate
-  double richardson_correction;  // refined - central
+  double central;
+  double refined;
+  double richardson_correction;
   int n_gradients;
 };
 
-// Mode-level Richardson for flagged modes only (spec §6). Columns of `modes`
-// are Cartesian directions; each is normalized.
 template <ElectronicModel Model>
 [[nodiscard]] std::vector<RefinedMode> refine_modes(Model& model, const Geometry& reference,
                                                     const Eigen::MatrixXd& modes, double step) {
@@ -79,7 +72,6 @@ template <ElectronicModel Model>
     if (!(norm > 0.0)) throw std::invalid_argument("mode columns must be nonzero");
     const Eigen::VectorXd v = modes.col(k) / norm;
     auto grad_at = [&](double t) { return detail::gradient_along(model, reference, v, t); };
-    // Four gradients per mode; the central estimate reuses the +-h points.
     const Eigen::VectorXd gp1 = grad_at(step), gm1 = grad_at(-step);
     const Eigen::VectorXd gp2 = grad_at(2.0 * step), gm2 = grad_at(-2.0 * step);
     const double c = v.dot(gp1 - gm1) / (2.0 * step);
@@ -89,4 +81,4 @@ template <ElectronicModel Model>
   return out;
 }
 
-}  // namespace saddle::hess
+}

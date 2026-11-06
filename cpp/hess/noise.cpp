@@ -15,7 +15,7 @@ double binomial(int n, int k) {
   return out;
 }
 
-}  // namespace
+}
 
 NoiseEstimate estimate_noise_from_line(const std::vector<Eigen::VectorXd>& samples, int order) {
   const auto n = static_cast<int>(samples.size());
@@ -26,7 +26,6 @@ NoiseEstimate estimate_noise_from_line(const std::vector<Eigen::VectorXd>& sampl
   for (const auto& s : samples) {
     if (s.size() != dim) throw ShapeError("noise samples have inconsistent lengths");
   }
-  // Coefficients of the order-m forward difference: (-1)^(m-j) C(m, j).
   std::vector<double> coeff(static_cast<std::size_t>(order + 1));
   for (int j = 0; j <= order; ++j) {
     coeff[static_cast<std::size_t>(j)] = ((order - j) % 2 == 0 ? 1.0 : -1.0) * binomial(order, j);
@@ -63,4 +62,4 @@ double noise_frequency_cm(double force_constant_error, double mass_amu) {
          constants::kHartreeToWavenumber;
 }
 
-}  // namespace saddle::hess
+}

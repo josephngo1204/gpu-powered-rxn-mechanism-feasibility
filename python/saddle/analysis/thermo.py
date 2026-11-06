@@ -1,4 +1,4 @@
-"""Ideal-gas RRHO thermochemistry with quasi-harmonic entropy (spec §4).
+"""Ideal-gas RRHO thermochemistry with quasi-harmonic entropy.
 
 G = E_high + ZPE + H_thermal - T*S + dG_standard_state
 
@@ -20,7 +20,7 @@ from saddle import units
 FloatArray = npt.NDArray[np.float64]
 
 QRRHO_CUTOFF_CM = 100.0
-QRRHO_AVERAGE_MOMENT_KG_M2 = 1e-44  # Grimme's B_av
+QRRHO_AVERAGE_MOMENT_KG_M2 = 1e-44
 LINEAR_TOLERANCE = 1e-8
 
 _K = units.BOLTZMANN_J_K
@@ -35,7 +35,7 @@ _BOHR_M = units.BOHR_TO_ANGSTROM * 1e-10
 class ThermoResult:
     temperature_k: float
     zpe: float
-    thermal_enthalpy: float  # H(T) - E - ZPE, including the PV = RT term
+    thermal_enthalpy: float
     entropy_translational: float
     entropy_rotational: float
     entropy_vibrational: float
@@ -67,7 +67,7 @@ class ThermoResult:
 
 def standard_state_correction(temperature_k: float) -> float:
     """Per-species free-energy change from 1 atm to 1 mol/L: RT ln(c° R T / P°)."""
-    c0 = 1000.0  # mol/m^3
+    c0 = 1000.0
     return (
         _R * temperature_k * math.log(c0 * _R * temperature_k / units.ATM_TO_PA) * _J_MOL_TO_HARTREE
     )
@@ -129,13 +129,11 @@ def rrho(
     t = temperature_k
     rt = _R * t
 
-    # Translation (ideal gas at 1 atm).
     m_kg = masses.sum() * units.AMU_TO_KG
     q_trans = (2.0 * math.pi * m_kg * _K * t / _H**2) ** 1.5 * _K * t / units.ATM_TO_PA
     s_trans = _R * (math.log(q_trans) + 2.5)
     h_thermal = 2.5 * rt
 
-    # Rotation.
     s_rot = 0.0
     linear = False
     if masses.size > 1:
@@ -154,7 +152,6 @@ def rrho(
             s_rot = _R * (math.log(q_rot) + 1.5)
             h_thermal += 1.5 * rt
 
-    # Vibration.
     zpe = 0.0
     s_vib = 0.0
     for nu in freqs:

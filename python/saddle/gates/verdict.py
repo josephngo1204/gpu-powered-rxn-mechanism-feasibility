@@ -1,4 +1,4 @@
-"""Verdict logic (spec §5 "Verdict logic").
+"""Verdict logic.
 
 SUPPORTED            gates pass, dG‡ + 2σ below the limit, not outcompeted
 OUTCOMPETED          feasible, but another valid route is lower by more than 2σ

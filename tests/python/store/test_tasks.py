@@ -39,7 +39,7 @@ def test_claim_respects_dependencies(tmp_path: Path) -> None:
     second = store.submit(t("hessian", deps=(first,)))
     claimed = store.claim("gpu0")
     assert claimed is not None and claimed.task_id == first
-    assert store.claim("gpu1") is None  # dependency not done yet
+    assert store.claim("gpu1") is None
     store.complete(first, "gpu0", "runs/opt.h5")
     nxt = store.claim("gpu1")
     assert nxt is not None and nxt.task_id == second
@@ -78,7 +78,6 @@ def test_restart_requeues_stale_running_tasks(tmp_path: Path) -> None:
     store = TaskStore(path)
     tid = store.submit(t("scf"))
     store.claim("gpu0")
-    # Worker dies; a new process opens the same store.
     reopened = TaskStore(path)
     assert reopened.status(tid).state == "running"
     time.sleep(0.01)

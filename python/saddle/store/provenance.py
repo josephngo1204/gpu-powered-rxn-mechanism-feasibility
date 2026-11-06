@@ -1,4 +1,4 @@
-"""Result provenance (spec §7 "Data rules").
+"""Result provenance.
 
 Every result stores geometry hash, atom order, charge, spin, basis data,
 grids, functional, thresholds, math mode, cuEST version, CUDA version, GPU
@@ -39,7 +39,6 @@ SPEC_FIELDS = (
     "git_commit",
 )
 
-# Fields that change a computed gradient; they key cached stencil points.
 SETTINGS_FIELDS = (
     "model",
     "basis",

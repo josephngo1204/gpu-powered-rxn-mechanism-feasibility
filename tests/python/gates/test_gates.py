@@ -6,7 +6,6 @@ from saddle.analysis.hessian_quality import Check, QualityReport
 from saddle.gates import gates as G
 from saddle.gates.gates import Evidence
 
-# SN2 geometry at the TS: Cl(1) ... C(2) ... Cl(6), H 3-5 planar.
 XYZ_TS = (
     np.array(
         [[-2.3, 0, 0], [0, 0, 0], [0, 1.08, 0], [0, -0.54, 0.935], [0, -0.54, -0.935], [2.3, 0, 0]]
@@ -21,9 +20,9 @@ FORMING = ((1, 2),)
 def _mode_sn2() -> np.ndarray:
     """Antisymmetric Cl-C-Cl stretch with carbon moving toward Cl(1)."""
     m = np.zeros(18)
-    m[0] = 0.2  # Cl1
-    m[3] = -0.9  # C
-    m[15] = 0.2  # Cl6
+    m[0] = 0.2
+    m[3] = -0.9
+    m[15] = 0.2
     return m / np.linalg.norm(m)
 
 
@@ -82,10 +81,10 @@ def test_all_gates_pass_on_good_evidence() -> None:
 
 def test_g1_thresholds_and_failure() -> None:
     assert G.g1_stationarity(good()).passed
-    e = good().replace(gradient=np.full(18, 1.2e-5))  # rms > 1e-5
+    e = good().replace(gradient=np.full(18, 1.2e-5))
     r = G.g1_stationarity(e)
     assert not r.passed and r.failure_action == "refine_again"
-    e = good().replace(gradient=np.r_[np.zeros(17), 2e-5])  # max > 1.5e-5, rms small
+    e = good().replace(gradient=np.r_[np.zeros(17), 2e-5])
     assert not G.g1_stationarity(e).passed
 
 
@@ -145,7 +144,7 @@ def test_g5_accepts_reactive_mode_and_rejects_torsion() -> None:
 
 def test_g5_rejects_inconsistent_bond_change_signs() -> None:
     m = np.zeros(18)
-    m[0], m[15] = -0.5, 0.5  # both Cl move away: both bonds stretch together
+    m[0], m[15] = -0.5, 0.5
     r = G.g5_mode_character(good().replace(ts_mode_cartesian=m / np.linalg.norm(m)))
     assert not r.passed and "sign" in r.reason
 
@@ -210,6 +209,6 @@ def test_missing_evidence_fails(gate, field) -> None:  # type: ignore[no-untyped
 
 def test_g1_uses_internal_gradient_and_reports_removed_torque() -> None:
     raw = np.full(18, 1e-6)
-    raw[0] += 3e-5  # spurious torque-like component removed by projection
+    raw[0] += 3e-5
     r = G.g1_stationarity(good().replace(raw_gradient=raw))
     assert r.passed and "removed" in r.reason

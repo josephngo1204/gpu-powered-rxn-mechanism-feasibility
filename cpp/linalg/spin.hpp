@@ -8,7 +8,6 @@ struct Unrestricted {};
 template <class Spin>
 struct SpinTraits;
 
-// J/K gradient scale factors depend on the spin formulation (spec §8).
 template <>
 struct SpinTraits<Restricted> {
   static constexpr double coulomb_gradient_scale = 2.0;
@@ -23,4 +22,4 @@ struct SpinTraits<Unrestricted> {
   static constexpr int n_density_matrices = 2;
 };
 
-}  // namespace saddle
+}

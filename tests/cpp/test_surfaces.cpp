@@ -36,13 +36,12 @@ double coord(double lo, double hi) {
   return lo + (hi - lo) * (*rc::gen::inRange(0, 1'000'000)) * 1e-6;
 }
 
-}  // namespace
+}
 
 TEST(MullerBrown, KnownMinimumEnergy) {
   MullerBrown mb;
   const auto e = mb.evaluate(Geometry::cartesian({-0.558224, 1.441726}), {});
   EXPECT_NEAR(e.energy.value(), -146.69951720, 1e-5);
-  // Literature coordinates have 6 decimals and the curvature is ~1e3.
   EXPECT_LT(e.gradient.norm(), 1e-2);
   EXPECT_TRUE(e.diagnostics.converged);
 }
@@ -82,7 +81,7 @@ RC_GTEST_PROP(Morse, AnalyticGradientMatchesFiniteDifference, ()) {
   Morse morse{0.15, 1.0, 1.4};
   Geometry g{{1, 1}, Eigen::VectorXd::Zero(6)};
   for (Eigen::Index i = 0; i < 6; ++i) g.coords[i] = coord(-1.5, 1.5);
-  g.coords[5] += 2.0;  // keep atoms apart
+  g.coords[5] += 2.0;
   const Eigen::VectorXd analytic = morse.evaluate(g, {}).gradient;
   const Eigen::VectorXd numeric = fd_gradient(morse, g, 1e-5);
   RC_ASSERT((analytic - numeric).norm() <= 1e-7);
@@ -102,7 +101,6 @@ TEST(Harmonic, EnergyAndGradient) {
   k << 2.0, 0.5, 0.5, 1.0;
   Harmonic h{Eigen::Vector2d(1.0, -1.0), k};
   const auto e = h.evaluate(Geometry::cartesian({2.0, 0.0}), {});
-  // dx = (1, 1): E = 0.5 * (2 + 1 + 1) = 2, g = K dx = (2.5, 1.5)
   EXPECT_DOUBLE_EQ(e.energy.value(), 2.0);
   EXPECT_DOUBLE_EQ(e.gradient[0], 2.5);
   EXPECT_DOUBLE_EQ(e.gradient[1], 1.5);

@@ -1,4 +1,4 @@
-"""Spec §11 negative controls repeated with real electronic structure (cuEST).
+"""Negative controls repeated with real electronic structure (cuEST).
 
 The fake-surface versions live in test_negative_controls.py. These controls
 need an SCF: forced PCM non-convergence and a torsional saddle submitted as a
@@ -31,7 +31,6 @@ WATER_BOHR = (
 
 def test_forced_pcm_non_convergence_fails_g2() -> None:
     info = SystemInfo(WATER, (WATER,), (0,), 0, "water")
-    # One PCM iteration cannot reach the 1e-10 charge residual.
     spec = {"type": "cuest", "functional": "HF", "basis": "def2-SVP", "pcm": {"max_iterations": 1}}
     provider = build_provider(spec, None, info)
     try:
@@ -78,7 +77,7 @@ def torsion_direction(x: np.ndarray) -> np.ndarray:
 
 @pytest.mark.slow
 def test_ethane_torsional_ts_as_reaction_ts_fails_g5_and_g6() -> None:
-    """Spec §11: the eclipsed-ethane saddle has one imaginary mode (passes G4)
+    """The eclipsed-ethane saddle has one imaginary mode (passes G4)
     but is not a 1,2-H shift TS: the mode carries no reactive bond change (G5)
     and the IRC returns staggered ethane on both sides (G6)."""
     symbols = ("C", "C", "H", "H", "H", "H", "H", "H")
@@ -130,17 +129,13 @@ def test_ethane_torsional_ts_as_reaction_ts_fails_g5_and_g6() -> None:
     assert G.g1_stationarity(e).passed
     g4 = G.g4_saddle_order(e)
     assert g4.passed, g4.reason
-    assert float(np.sort(vib.frequencies_cm)[0]) < -100.0  # a real torsional barrier mode
+    assert float(np.sort(vib.frequencies_cm)[0]) < -100.0
     g5, g6 = G.g5_mode_character(e), G.g6_connectivity(e)
     assert not g5.passed, g5.reason
     assert not g6.passed and ends["forward"] == ends["reverse"] == reactant, g6.reason
 
 
 HCN_SYMBOLS = ("H", "C", "N")
-# Spec §11 rotated-structure control: the decision limit is the scenario, not a
-# gate threshold. It sits between the canonical and rotated PBE/(20,26)
-# barriers measured in development (60.4 and 45.7 kcal/mol), so a grid
-# orientation artifact decides the verdict and G8 must catch it.
 ROTATION_CONTROL_LIMIT = 53.0
 
 
@@ -166,8 +161,6 @@ def _barrier_verdicts(grid: str) -> tuple[str, str, float]:
             barriers.append(units.hartree_to_kcal_mol(e["ts"] - e["min"]))
     finally:
         model.close()
-    # sigma about 1 kcal/mol; the grid term is the quantity under test, so it is
-    # not inflated to absorb the orientation shift.
     budget = UncertaintyBudget(
         tuple(
             Term(c, v, "benchmark" if c == "method" else "measured")
@@ -198,7 +191,7 @@ def _g8(baseline: str, rotation: str) -> G.GateResult:
 
 def test_rotated_structure_on_coarse_grid_fails_g8() -> None:
     baseline, rotated, shift = _barrier_verdicts("(20,26)")
-    assert shift > 5.0  # the orientation artifact is real on a coarse grid
+    assert shift > 5.0
     g8 = _g8(baseline, rotated)
     assert not g8.passed and "rotation" in g8.reason
 

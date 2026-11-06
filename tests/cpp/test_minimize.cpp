@@ -90,8 +90,6 @@ TEST(Bfgs, SatisfiesSecantCondition) {
 }
 
 namespace {
-// A rotation-invariant surface plus a constant spurious torque, mimicking the
-// rotational non-invariance of a DFT integration grid.
 struct TorqueModel {
   Springs inner;
   double torque;
@@ -108,7 +106,7 @@ struct TorqueModel {
     return e;
   }
 };
-}  // namespace
+}
 
 TEST(Minimize, SpuriousTorqueDoesNotBlockConvergence) {
   TorqueModel model{Springs{{Spring{0, 1, 0.5, 1.8}, Spring{0, 2, 0.5, 1.8}, Spring{1, 2, 0.1, 2.9}}}, 1e-5};
@@ -119,7 +117,6 @@ TEST(Minimize, SpuriousTorqueDoesNotBlockConvergence) {
   opt.gtol_max = 1.5e-8;
   const auto r = minimize(model, g, opt);
   ASSERT_TRUE(r.converged);
-  // The raw gradient still carries the torque; the internal gradient is converged.
   EXPECT_GT(r.evaluation.gradient.norm(), 1e-6);
   EXPECT_LE(rms(internal_gradient(r.geometry, r.evaluation.gradient)), 1e-8);
 }

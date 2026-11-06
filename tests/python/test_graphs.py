@@ -10,7 +10,6 @@ from saddle.graphs import (
 )
 from saddle.hypothesis import Pathway
 
-# Atom maps: 1 = Cl (nucleophile), 2 = C, 3-5 = H, 6 = Cl (leaving group).
 SYMBOLS = ("Cl", "C", "H", "H", "H", "Cl")
 MAP = (1, 2, 3, 4, 5, 6)
 
@@ -28,8 +27,8 @@ def _geom(c_cl_in: float, c_cl_out: float, h_x: float) -> np.ndarray:
     return np.asarray(xyz).ravel() / units.BOHR_TO_ANGSTROM
 
 
-REACTANT_COMPLEX = _geom(3.2, 1.80, -0.36)  # Cl- ... CH3Cl
-PRODUCT_COMPLEX = _geom(1.80, 3.2, 0.36)  # ClCH3 ... Cl-
+REACTANT_COMPLEX = _geom(3.2, 1.80, -0.36)
+PRODUCT_COMPLEX = _geom(1.80, 3.2, 0.36)
 SN2 = Pathway("sn2", breaking=((2, 6),), forming=((1, 2),))
 
 

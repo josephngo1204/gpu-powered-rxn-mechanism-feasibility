@@ -1,11 +1,8 @@
-"""TS validation gates G1-G8 (spec §5).
+"""TS validation gates G1-G8.
 
 Each gate is a pure function of an evidence bundle and returns pass/fail, a
-reason and the spec's failure action. Missing evidence always fails: a gate
-never passes because something was not checked (spec §10, §12).
-
-Thresholds are spec values except where marked PROPOSED; changing any of
-them is an "Ask first" item (spec §12).
+reason and the action to take on failure. Missing evidence always fails: a gate
+never passes because something was not checked.
 """
 
 import dataclasses
@@ -22,11 +19,9 @@ from saddle.graphs import Graph
 FloatArray = npt.NDArray[np.float64]
 Bond = tuple[int, int]
 
-G1_RMS_GRADIENT = 1e-5  # Eh/bohr
+G1_RMS_GRADIENT = 1e-5
 G1_MAX_GRADIENT = 1.5e-5
-G4_SMALL_MODE_FACTOR = 3.0  # second imaginary mode within 3x the noise floor
-# PROPOSED (not in spec): minimum share of the TS mode's bond-stretch
-# amplitude that must fall on the declared breaking/forming bonds.
+G4_SMALL_MODE_FACTOR = 3.0
 G5_MIN_REACTIVE_SHARE = 0.5
 G5_SIGN_IGNORE_FRACTION = 1e-3
 G8_REQUIRED_CHECKS = ("grid", "precision", "functional")
@@ -45,7 +40,7 @@ class GateResult:
 class Evidence:
     """Everything the gates may inspect. Fields default to None (not collected)."""
 
-    gradient: FloatArray | None = None  # internal (TR-projected) gradient
+    gradient: FloatArray | None = None
     raw_gradient: FloatArray | None = None
     scf_converged: bool | None = None
     orbitals_stable: bool | None = None
@@ -89,8 +84,6 @@ def g1_stationarity(e: Evidence) -> GateResult:
     reason = (
         f"rms {rms:.2e}, max {gmax:.2e} Eh/bohr (limits {G1_RMS_GRADIENT:g}, {G1_MAX_GRADIENT:g})"
     )
-    # G1 is judged on the internal (TR-projected) gradient; a spurious DFT-grid
-    # torque is reported but does not count (user decision, tasks/plan.md).
     if e.raw_gradient is not None:
         spurious = float(np.max(np.abs(np.asarray(e.raw_gradient, dtype=np.float64) - g)))
         reason += f"; translation/rotation part removed (max {spurious:.1e})"
@@ -99,6 +92,13 @@ def g1_stationarity(e: Evidence) -> GateResult:
 
 def g2_electronic(e: Evidence) -> GateResult:
     gate, name, action = "G2", "electronic quality", "change_guess_or_reject"
+    if e.scf_converged is False:
+        problems = ["SCF not converged"]
+        if e.orbitals_stable is False:
+            problems.append("orbital solution unstable")
+        if e.uses_pcm and e.pcm_converged is False:
+            problems.append("PCM not converged")
+        return GateResult(gate, name, False, "; ".join(problems), action)
     if e.scf_converged is None or e.orbitals_stable is None or e.uses_pcm is None:
         return _missing(gate, name, "SCF convergence, orbital stability or PCM usage", action)
     if e.uses_pcm and e.pcm_converged is None:
@@ -277,8 +277,6 @@ ALL_GATES: tuple[Callable[[Evidence], GateResult], ...] = (
 )
 
 
-# G1-G7. G8 (robustness) compares verdicts, so it runs only after every
-# variant has its own preliminary verdict from these seven.
 GATES_BEFORE_ROBUSTNESS = ALL_GATES[:-1]
 
 

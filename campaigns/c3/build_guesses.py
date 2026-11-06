@@ -15,7 +15,6 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent / "species"
 
-# (C-X in the SN2 TS, C-X / Cb-H / Nu-H in the E2 TSs)
 PARAMS = {
     "F": {"sn2_cx": 1.85, "e2_cx": 1.75, "e2_ch": 1.35, "e2_nuh": 1.15, "cx": 1.40, "nu_r": 2.6},
     "Cl": {"sn2_cx": 2.33, "e2_cx": 2.35, "e2_ch": 1.55, "e2_nuh": 1.55, "cx": 1.80, "nu_r": 3.2},
@@ -57,7 +56,7 @@ def ethyl_halide(x: str, p: dict[str, float]) -> list[np.ndarray]:
     down = np.array([0.0, 0.0, -1.0])
     (xpos,) = tetra(ca, ca - cb, down, p["cx"], [0.0])
     ha = tetra(ca, ca - cb, down, CH, [120.0, 240.0])
-    hb = tetra(cb, cb - ca, down, CH, [180.0, 60.0, 300.0])  # H7 anti to X, H8/H9 gauche
+    hb = tetra(cb, cb - ca, down, CH, [180.0, 60.0, 300.0])
     return [ca, cb, xpos, *ha, *hb]
 
 
@@ -68,7 +67,6 @@ def sn2_ts(x: str, p: dict[str, float]) -> list[np.ndarray]:
     nu = np.array([0.0, 0.0, -p["sn2_cx"]])
     cb = np.array([CC, 0.0, 0.0])
     ha = [CH * np.array([np.cos(a), np.sin(a), 0.0]) for a in np.deg2rad([120.0, 240.0])]
-    # Methyl rotated so no H points along the Nu...C...X axis.
     hb = tetra(cb, cb - ca, np.array([0.0, 0.0, 1.0]), CH, [90.0, 210.0, 330.0])
     return [nu, ca, cb, xpos, *ha, *hb]
 
@@ -79,7 +77,6 @@ def e2_ts(x: str, p: dict[str, float], syn: bool) -> list[np.ndarray]:
     down = np.array([0.0, 0.0, -1.0])
     (xpos,) = tetra(ca, ca - cb, down, p["e2_cx"], [0.0])
     ha = tetra(ca, ca - cb, down, CH, [120.0, 240.0])
-    # anti: transferred H at dihedral 180 from X; syn: at 0 (eclipsing X).
     phis = [0.0, 120.0, 240.0] if syn else [180.0, 60.0, 300.0]
     hb = tetra(cb, cb - ca, down, CH, phis)
     moved = unit(hb[0] - cb)

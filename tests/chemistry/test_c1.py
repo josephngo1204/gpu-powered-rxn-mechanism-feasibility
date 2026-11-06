@@ -1,8 +1,8 @@
-"""C1 (spec §3): Cl- + CH3Cl gas-phase identity SN2 must show the double well.
+"""C1: Cl- + CH3Cl gas-phase identity SN2 must show the double well.
 
-Reference: data/references.yaml (CCSD(T)/aug-cc-pVQZ via the spec table):
+Reference: data/references.yaml (CCSD(T)/aug-cc-pVQZ):
 complex -10.42, TS +2.52 kcal/mol relative to separated reactants (electronic).
-Spec §14: "C1 reproduces the double well"; §14 MAD target 2 kcal/mol.
+Pass criteria: the double well is reproduced, with errors within 2 kcal/mol.
 
 Set SADDLE_C1_RUN to a finished `saddle run campaigns/c1/c1_sn2.yaml` output
 directory to check it without rerunning (the campaign takes hours on one MIG slice).
@@ -23,7 +23,7 @@ pytestmark = [pytest.mark.gpu, pytest.mark.slow, pytest.mark.ladder]
 
 ROOT = Path(__file__).resolve().parents[2]
 REF = yaml.safe_load((ROOT / "data" / "references.yaml").read_text())["c1_cl_ch3cl_gas"]
-TOL = 2.0  # kcal/mol, spec §14
+TOL = 2.0
 
 
 @pytest.fixture(scope="module")
@@ -47,11 +47,11 @@ def test_double_well(sn2: dict[str, object]) -> None:
     wells = sn2["endpoint_minima_kcal_mol"]
     complex_ = min(wells.values())  # type: ignore[union-attr]
     ts = sn2["electronic_barrier_kcal_mol"]
-    assert complex_ < -5.0  # ion-dipole complex well below separated reactants
-    assert ts > complex_ + 5.0  # central barrier above the complex
+    assert complex_ < -5.0
+    assert ts > complex_ + 5.0
 
 
-def test_energies_match_ccsdt_within_spec_tolerance(sn2: dict[str, object]) -> None:
+def test_energies_match_ccsdt_within_tolerance(sn2: dict[str, object]) -> None:
     complex_ = min(sn2["endpoint_minima_kcal_mol"].values())  # type: ignore[union-attr]
     assert complex_ == pytest.approx(REF["complex_kcal_mol"], abs=TOL)
     assert sn2["electronic_barrier_kcal_mol"] == pytest.approx(REF["ts_kcal_mol"], abs=TOL)

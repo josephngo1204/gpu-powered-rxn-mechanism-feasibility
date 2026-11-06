@@ -48,7 +48,6 @@ def test_eckart_is_independent_of_direction() -> None:
 def test_eckart_transmission_is_half_at_symmetric_barrier_top_in_classical_limit() -> None:
     v = units.kcal_mol_to_hartree(50.0)
     p = tunneling.eckart_transmission(v, 1.0, v, v)
-    # Asymptotic limit; the finite-alpha correction here is ~6e-6.
     assert p == pytest.approx(0.5, abs=1e-4)
 
 

@@ -27,7 +27,7 @@ void validate(const Eigen::MatrixXd& hessian, const Eigen::VectorXd& coords,
   if ((masses.array() <= 0.0).any()) throw std::invalid_argument("vibrations: masses must be positive");
 }
 
-}  // namespace
+}
 
 double eigenvalue_to_wavenumber(double eigenvalue) {
   const double omega = std::sqrt(std::abs(eigenvalue) / constants::kAmuToElectronMass) *
@@ -67,7 +67,6 @@ Eigen::MatrixXd external_basis(const Eigen::VectorXd& coords, const Eigen::Vecto
       raw.block<3, 1>(3 * i, 3 + a) = s * axis.cross(r);
     }
   }
-  // Orthonormalize and keep the numerical rank (5 for linear geometries).
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(raw, Eigen::ComputeThinU);
   const auto& sv = svd.singularValues();
   Eigen::Index rank = 0;
@@ -86,7 +85,6 @@ VibrationalAnalysis analyze_vibrations(const Eigen::MatrixXd& hessian, const Eig
   const Eigen::VectorXd inv_sqrt_m = inverse_sqrt_masses(masses);
   const Eigen::MatrixXd hmw = inv_sqrt_m.asDiagonal() * hessian * inv_sqrt_m.asDiagonal();
 
-  // Translation sum rule on the Cartesian Hessian.
   double sum_rule = 0.0;
   for (Eigen::Index row = 0; row < n3; ++row) {
     for (Eigen::Index b = 0; b < 3; ++b) {
@@ -125,4 +123,4 @@ VibrationalAnalysis analyze_vibrations(const Eigen::MatrixXd& hessian, const Eig
   return out;
 }
 
-}  // namespace saddle::hess
+}

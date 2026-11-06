@@ -9,7 +9,6 @@ FloatArray = npt.NDArray[np.float64]
 T = 298.15
 H, D, C12, C13 = 1.00782503223, 2.01410177812, 12.0, 13.00335483507
 
-# Triangle C (0), H (1), acceptor B (2), coordinates in bohr.
 COORDS = np.array([0.0, 0.0, 0.0, 2.06, 0.0, 0.0, 1.6, 2.6, 0.0])
 
 
@@ -24,8 +23,8 @@ def _hessian(k_ch: float, k_hb: float, k_cb: float) -> FloatArray:
     return np.asarray(sym)
 
 
-REACTANT = _hessian(0.33, 0.02, 0.30)  # stiff C-H stretch near 3000 cm^-1
-TS = _hessian(-0.08, 0.02, 0.30)  # C-H stretch becomes the reaction coordinate
+REACTANT = _hessian(0.33, 0.02, 0.30)
+TS = _hessian(-0.08, 0.02, 0.30)
 
 
 def _pair(hess: FloatArray, light: list[float], heavy: list[float]) -> IsotopologuePair:

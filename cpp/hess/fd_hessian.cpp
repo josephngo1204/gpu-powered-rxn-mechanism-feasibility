@@ -48,4 +48,4 @@ HessianResult assemble_central(const std::vector<Eigen::VectorXd>& gradients, do
                        static_cast<int>(gradients.size())};
 }
 
-}  // namespace saddle::hess
+}

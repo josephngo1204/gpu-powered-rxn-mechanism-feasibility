@@ -92,7 +92,7 @@ def test_noisy_precision_variant_breaks_robustness(tmp_path: Path) -> None:
 def test_pcm_failure_during_search_is_reported_as_g2(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Spec §11/§12: a PCM convergence failure is a G2 rejection, not a silent drop."""
+    """A PCM convergence failure is a G2 rejection, not a silent drop."""
     from saddle.errors import PCMNotConverged
     from saddle.workflows import pipeline
 
@@ -110,3 +110,27 @@ def test_pcm_failure_during_search_is_reported_as_g2(
     assert not g2["passed"] and "PCM not converged" in g2["reason"]
     assert any("PCM charges did not converge" in n for n in s["notes"])
     assert r.verdicts["to_c"] is not Verdict.SUPPORTED
+
+
+def _campaign_copy(tmp_path: Path) -> Path:
+    target = tmp_path / "fake"
+    shutil.copytree(CAMPAIGN.parent, target)
+    return target / CAMPAIGN.name
+
+
+def test_ts_guess_with_reordered_atoms_is_rejected(tmp_path: Path) -> None:
+    campaign = _campaign_copy(tmp_path)
+    guess = campaign.parent / "species" / "ts_to_c.xyz"
+    lines = guess.read_text().splitlines()
+    lines[2], lines[3] = lines[3], lines[2]
+    guess.write_text("\n".join(lines) + "\n")
+    with pytest.raises(CampaignError, match="atom order"):
+        load_campaign(campaign)
+
+
+def test_ts_guess_with_unknown_element_is_rejected(tmp_path: Path) -> None:
+    campaign = _campaign_copy(tmp_path)
+    guess = campaign.parent / "species" / "ts_to_c.xyz"
+    guess.write_text(guess.read_text().replace("H   1.561072", "Xx  1.561072"))
+    with pytest.raises(CampaignError, match="unknown element"):
+        load_campaign(campaign)
