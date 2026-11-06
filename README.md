@@ -14,9 +14,9 @@ gate, so a result can never pass because a check was skipped.
 ## Headline result: C1, Cl⁻ + CH₃Cl SN2
 
 The identity SN2 reaction is a classic benchmark with a double-well energy profile (an ion–dipole
-complex on each side of a central TS). Saddle reproduces it from scratch on one GPU slice:
+complex on each side of a central TS). The pipeline reproduces it from scratch on one GPU slice:
 
-| Quantity (kcal/mol, vs. separated reactants) | Saddle (ωB97X-V/def2-SVPD) | CCSD(T) reference |
+| Quantity (kcal/mol, vs. separated reactants) | Pipeline (ωB97X-V/def2-SVPD) | CCSD(T) reference |
 |---|---|---|
 | Transition state | **+2.47** | +2.52 |
 | Ion–dipole complex | **−11.67** | −10.42 |
